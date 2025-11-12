@@ -1,0 +1,71 @@
+# Web scraping and downloading
+selenium==4.15.2
+beautifulsoup4==4.14.2
+requests==2.32.5
+openpyxl==3.1.5
+
+# PDF processing
+PyPDF2==3.0.1
+pypdf==3.17.4
+PyMuPDF==1.26.5
+
+# Docling for advanced PDF parsing with dependencies
+docling==2.58.0
+docling-core==2.49.0
+docling-hierarchical-pdf==0.1.2
+docling-ibm-models==3.10.1
+docling-parse==4.7.0
+pypdfium2==4.30.0
+
+# Torch dependencies
+torch==2.9.0
+torchvision==0.24.0
+
+# OCR engines
+easyocr==1.7.2
+rapidocr-onnxruntime==1.4.4
+rapidocr==3.4.2
+
+# ONNX runtime for model inference
+onnxruntime==1.23.2
+
+# Embeddings and vector DB
+sentence-transformers==2.7.0
+psycopg2-binary==2.9.9
+pgvector==0.2.4
+
+# Translation and language detection
+langdetect==1.0.9
+deep-translator==1.11.4
+
+# NLP and summarization
+nltk==3.9.2
+numpy==2.2.6
+transformers==4.57.1
+huggingface-hub>=0.20.0
+
+# Optional: Mistral models support (install only if using Mistral models)
+mistral-common[sentencepiece]>=1.0.0
+
+# Web framework
+flask==3.0.0
+
+# Utilities
+python-dotenv==1.0.0
+
+# Visualization
+plotly==5.18.0
+kaleido==0.2.1
+
+# Development dependencies
+pre-commit==3.6.0
+black==24.1.1
+flake8==7.0.0
+isort==5.13.2
+mypy==1.8.0
+mypy-extensions==1.1.0
+pytest==7.4.3
+types-requests==2.32.4.20250913
+types-beautifulsoup4==4.12.0.7
+types-html5lib==1.1.11.20251014
+types-openpyxl==3.1.0.20240311
