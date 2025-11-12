@@ -21,17 +21,6 @@ The `data/` directory includes sample results from processing UNEG evaluation re
 
 ![Pipeline Results](./assets/pipeline_results_2023-2025.png)
 
-## Architecture
-
-```
-┌──────────┐   ┌──────────┐   ┌──────────┐
-│  Parse   │──▶│Summarize │──▶│  Stats   │
-│  (Docs)  │   │(Key Text)│   │(Metrics) │
-└──────────┘   └──────────┘   └──────────┘
-     │              │              │
-     ▼              ▼              ▼
-Markdown+JSON   Summary Cols    Stats Tab
-```
 
 ## Prerequisites
 
@@ -142,6 +131,132 @@ python pipeline/summarize.py
 # 3. Generate statistics and visualizations
 python pipeline/stats.py
 ```
+
+## How the Metadata Sheet is Updated
+
+The metadata Excel file (`pdf_metadata.xlsx`) serves as the central tracking system for the entire pipeline. Each stage adds columns and updates values to track progress and results.
+
+### Initial State (Manual Setup)
+
+Before running any pipeline stages, you manually populate the metadata sheet with:
+
+**Required columns:**
+- `Node ID` - Unique identifier
+- `Title` - Document title
+- `Agency` - Organization name
+- `Year` - Publication year
+- `Filepath` - Path to PDF/DOCX file
+
+**Optional columns:**
+- `Year Published`, `Evaluation Type`, `Country`, `Region`, `SDGs`, `Theme`, `Description`
+
+### Stage 1: parse.py - Document Parsing
+
+**Columns Added:**
+- `Parsed Folder` - Path to parsed output directory (e.g., `./data/parsed/WFP/2024/Report_12345`)
+- `Parsed Markdown Path` - Path to markdown file (e.g., `data/parsed/WFP/2024/Report_12345/Report.md`)
+- `TOC` - Table of contents with hierarchical headings (H1-H5)
+- `Page Count` - Number of pages in the document
+- `Word Count` - Total word count
+- `Language` - Detected language (e.g., "en", "fr", "es")
+- `File Format` - Document type ("pdf" or "docx")
+- `Parsing Error` - Error message if parsing failed (e.g., "Out Of Memory")
+
+**What happens:**
+- Reads `Filepath` column to locate documents
+- Uses Docling to parse PDFs/DOCX files
+- Extracts hierarchical structure and creates markdown
+- Detects document language from content
+- Updates metadata row with parsing results
+- If already parsed (has `Parsed Folder` value), skips unless `--force-parse` is used
+
+**Example Row After Parsing:**
+```
+| Filepath            | Parsed Folder          | TOC                      | Page Count | Language |
+|---------------------|------------------------|--------------------------|------------|----------|
+| ./data/.../doc.pdf  | ./data/parsed/WFP/...  | [H1] Executive Summary   | 87         | en       |
+|                     |                        | [H1] Introduction...     |            |          |
+```
+
+### Stage 2: summarize.py - Summary Generation
+
+**Columns Added:**
+- `Key Content Sections` - Path to extracted summary sections (e.g., Executive Summary)
+- `Centroid Summary` - Path to extractive centroid-based summary
+- `Abstractive Summary (map reduced)` - Path to LLM-generated summary
+- `Abstractive Summary Input Method` - How summary was created:
+  - `"Key Content Sections (X pages)"` - Used extracted sections
+  - `"Centroid Summary"` - Used centroid fallback
+  - `"Full Document"` - Summarized entire document
+  - `"Full Document (chunked)"` - Used map-reduce chunking
+  - `"Executive Summary Section Only"` - Used detected executive summary
+
+**What happens:**
+- Reads `Parsed Markdown Path` to load parsed content
+- Reads `TOC` to detect summary sections
+- Generates multiple summary types:
+  1. **Key Content Sections**: Extracts pre-existing summaries from TOC
+  2. **Centroid Summary**: Creates extractive summary using embeddings
+  3. **Abstractive Summary**: Generates new summary using LLM
+- Uses `Language` column to determine if translation is needed
+- Translates non-English summaries to English
+- Saves summaries as separate text files, stores file paths in Excel
+- If already summarized (has summary values), skips unless `--force` is used
+
+**Example Row After Summarizing:**
+```
+| Key Content Sections           | Centroid Summary              | Abstractive Summary        | Input Method              |
+|--------------------------------|-------------------------------|----------------------------|---------------------------|
+| data/.../key_content.txt       | data/.../centroid.txt         | data/.../llm_summary.txt   | Key Content Sections      |
+|                                |                               |                            | (8 pages)                 |
+```
+
+### Stage 3: stats.py - Statistics & Visualization
+
+**Sheets Added:**
+- `Stats` - Organization-level statistics table
+- `Stats Viz` - Embedded Sankey diagram visualization
+
+**Files Created:**
+- `data/pipeline_sankey.png` - Pipeline flow visualization
+
+**What happens:**
+- Reads all existing columns from metadata sheet
+- Aggregates data by organization:
+  - Counts successful parsing (rows with `Parsed Folder`)
+  - Counts TOCs (rows with `TOC` content)
+  - Counts summaries (rows with `Key Content Sections`)
+  - Counts abstractive summaries (rows with `Abstractive Summary`)
+  - Calculates average page/word counts
+  - Determines year ranges
+- Creates new `Stats` tab with organization-level metrics
+- Generates Sankey diagram showing document flow through pipeline
+- Embeds visualization in `Stats Viz` tab
+
+**Stats Tab Example:**
+```
+| Organization | Start Year | End Year | Total PDFs | % Parsed | % with TOC | % with Summary |
+|--------------|------------|----------|------------|----------|------------|----------------|
+| WFP          | 2023       | 2025     | 145        | 98.6%    | 92.4%      | 87.6%          |
+| UNICEF       | 2023       | 2025     | 89         | 97.8%    | 88.8%      | 84.3%          |
+```
+
+### Column Dependencies
+
+Each stage depends on columns from previous stages:
+
+```
+Manual Input → parse.py → summarize.py → stats.py
+
+Filepath     → Parsed Folder      → Key Content Sections    → Stats aggregation
+               TOC                 → Centroid Summary
+               Page Count          → Abstractive Summary
+               Word Count
+               Language
+               File Format
+```
+
+**Best Practice:** Always run the pipeline in order (parse → summarize → stats) to ensure all required columns are populated for subsequent stages.
 
 ## Component Details
 
