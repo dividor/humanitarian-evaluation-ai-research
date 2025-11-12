@@ -11,6 +11,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import fitz  # PyMuPDF
 import openpyxl
 from docling.backend.docling_parse_v2_backend import DoclingParseV2DocumentBackend
 from docling.datamodel.base_models import InputFormat
@@ -28,20 +29,6 @@ from hierarchical.postprocessor import ResultPostprocessor
 # Note: Docling's page_break_placeholder doesn't support dynamic page numbers yet
 # This is a static separator that appears between pages
 PAGE_SEPARATOR = "\n\n------- Page Break -------\n\n"
-
-# Try to import PyMuPDF (faster), fall back to pypdf
-try:
-    import fitz  # PyMuPDF
-
-    USE_PYMUPDF = True
-except ImportError:
-    from pypdf import PdfReader, PdfWriter
-
-    USE_PYMUPDF = False
-    logger = logging.getLogger(__name__)
-    logger.warning(
-        "PyMuPDF not available, using pypdf (slower). Install with: pip install pymupdf"
-    )
 
 # Configure logging
 logging.basicConfig(
@@ -380,13 +367,9 @@ class DoclingParser:
             return False
 
         try:
-            if USE_PYMUPDF:
-                doc = fitz.open(filepath)
-                page_count = len(doc)
-                doc.close()
-            else:
-                reader = PdfReader(filepath)
-                page_count = len(reader.pages)
+            doc = fitz.open(filepath)
+            page_count = len(doc)
+            doc.close()
 
             should_chunk = page_count >= self.chunk_threshold
 
@@ -423,10 +406,7 @@ class DoclingParser:
         logger.info(f"Splitting PDF into chunks of {self.chunk_size} pages")
         logger.info(f"Temporary chunk directory: {temp_dir}")
 
-        if USE_PYMUPDF:
-            return self._split_with_pymupdf(filepath, temp_dir)
-        else:
-            return self._split_with_pypdf(filepath, temp_dir)
+        return self._split_with_pymupdf(filepath, temp_dir)
 
     def _split_with_pymupdf(self, filepath, temp_dir):
         """
@@ -475,57 +455,6 @@ class DoclingParser:
         logger.info(f"Split into {len(chunk_files)} chunks")
         return chunk_files, temp_dir
 
-    def _split_with_pypdf(self, filepath, temp_dir):
-        """
-        Split PDF using pypdf (slower fallback).
-
-        Used when PyMuPDF is not available.
-
-        Args:
-            filepath: Path to the PDF file
-            temp_dir: Temporary directory for storing chunks
-
-        Returns:
-            tuple: (chunk_files list, temp_directory path)
-        """
-        logger.info("Using pypdf for PDF splitting (this may be slow)...")
-
-        # Read source PDF
-        reader = PdfReader(str(filepath))
-        total_pages = len(reader.pages)
-
-        chunk_files = []
-        chunk_num = 0
-
-        for start_page in range(0, total_pages, self.chunk_size):
-            end_page = min(start_page + self.chunk_size, total_pages)
-            chunk_num += 1
-
-            # Create chunk writer
-            writer = PdfWriter()
-            for page_num in range(start_page, end_page):
-                writer.add_page(reader.pages[page_num])
-
-            # Save chunk
-            chunk_filename = f"{filepath.stem}_chunk_{chunk_num:03d}.pdf"
-            chunk_path = Path(temp_dir) / chunk_filename
-
-            with open(chunk_path, "wb") as output_file:
-                writer.write(output_file)
-
-            chunk_info = {
-                "path": str(chunk_path),
-                "chunk_num": chunk_num,
-                "start_page": start_page + 1,  # 1-indexed
-                "end_page": end_page,
-                "page_count": end_page - start_page,
-            }
-            chunk_files.append(chunk_info)
-            logger.info(f"  Created chunk {chunk_num}: pages {start_page+1}-{end_page}")
-
-        logger.info(f"Split into {len(chunk_files)} chunks")
-        return chunk_files, temp_dir
-
     def parse_pdf_chunk(self, chunk_path, chunk_num, start_page):
         """
         Parse a single PDF chunk.
@@ -550,13 +479,9 @@ class DoclingParser:
                 raise FileNotFoundError(f"Chunk file not found: {chunk_path}")
 
             # Verify it's actually a small chunk, not the full PDF
-            if USE_PYMUPDF:
-                chunk_doc = fitz.open(chunk_path)
-                chunk_pages = len(chunk_doc)
-                chunk_doc.close()
-            else:
-                chunk_reader = PdfReader(chunk_path)
-                chunk_pages = len(chunk_reader.pages)
+            chunk_doc = fitz.open(chunk_path)
+            chunk_pages = len(chunk_doc)
+            chunk_doc.close()
 
             logger.info(f"  Chunk file: {chunk_path_obj.name}")
             logger.info(
@@ -897,97 +822,51 @@ class DoclingParser:
             sample_text = ""
 
             # Extract text from first few pages (up to 10 pages to ensure enough text)
-            if USE_PYMUPDF:
-                doc = fitz.open(filepath)
-                total_pages = len(doc)
-                pages_to_check = min(10, total_pages)
+            doc = fitz.open(filepath)
+            total_pages = len(doc)
+            pages_to_check = min(10, total_pages)
+            logger.debug(
+                f"Extracting text from first {pages_to_check} pages (using PyMuPDF)"
+            )
+
+            for i in range(pages_to_check):
+                try:
+                    page_text = doc[i].get_text()
+                    if page_text:
+                        sample_text += page_text + " "
+                        # Stop early if we have enough text (2000 chars for better accuracy)
+                        if len(sample_text) > 2000:
+                            break
+                except Exception:
+                    continue
+
+            # Fallback: if not enough text from beginning, try middle pages
+            sample_text = " ".join(sample_text.split())
+            if len(sample_text) < 200 and total_pages > 10:
+                logger.warning(
+                    f"Not enough text from first pages (only {len(sample_text)} chars)"
+                )
+                logger.info("Trying 2 pages from middle of document...")
+                sample_text = ""
+
+                # Get 2 pages from the middle
+                middle_start = total_pages // 2 - 1
+                middle_pages = [middle_start, middle_start + 1]
+
+                for page_num in middle_pages:
+                    if 0 <= page_num < total_pages:
+                        try:
+                            page_text = doc[page_num].get_text()
+                            if page_text:
+                                sample_text += page_text + " "
+                        except Exception:
+                            continue
+
                 logger.debug(
-                    f"Extracting text from first {pages_to_check} pages (using PyMuPDF)"
+                    f"Extracted {len(sample_text)} chars from middle pages {middle_pages}"
                 )
 
-                for i in range(pages_to_check):
-                    try:
-                        page_text = doc[i].get_text()
-                        if page_text:
-                            sample_text += page_text + " "
-                            # Stop early if we have enough text (2000 chars for better accuracy)
-                            if len(sample_text) > 2000:
-                                break
-                    except Exception:
-                        continue
-
-                # Fallback: if not enough text from beginning, try middle pages
-                sample_text = " ".join(sample_text.split())
-                if len(sample_text) < 200 and total_pages > 10:
-                    logger.warning(
-                        f"Not enough text from first pages (only {len(sample_text)} chars)"
-                    )
-                    logger.info("Trying 2 pages from middle of document...")
-                    sample_text = ""
-
-                    # Get 2 pages from the middle
-                    middle_start = total_pages // 2 - 1
-                    middle_pages = [middle_start, middle_start + 1]
-
-                    for page_num in middle_pages:
-                        if 0 <= page_num < total_pages:
-                            try:
-                                page_text = doc[page_num].get_text()
-                                if page_text:
-                                    sample_text += page_text + " "
-                            except Exception:
-                                continue
-
-                    logger.debug(
-                        f"Extracted {len(sample_text)} chars from middle pages {middle_pages}"
-                    )
-
-                doc.close()
-
-            else:
-                pdf_reader = PdfReader(filepath)
-                total_pages = len(pdf_reader.pages)
-                pages_to_check = min(10, total_pages)
-                logger.debug(
-                    f"Extracting text from first {pages_to_check} pages (using pypdf)"
-                )
-
-                for i in range(pages_to_check):
-                    try:
-                        page_text = pdf_reader.pages[i].extract_text()
-                        if page_text:
-                            sample_text += page_text + " "
-                            # Stop early if we have enough text (2000 chars for better accuracy)
-                            if len(sample_text) > 2000:
-                                break
-                    except Exception:
-                        continue
-
-                # Fallback: if not enough text from beginning, try middle pages
-                sample_text = " ".join(sample_text.split())
-                if len(sample_text) < 200 and total_pages > 10:
-                    logger.warning(
-                        f"Not enough text from first pages (only {len(sample_text)} chars)"
-                    )
-                    logger.info("Trying 2 pages from middle of document...")
-                    sample_text = ""
-
-                    # Get 2 pages from the middle
-                    middle_start = total_pages // 2 - 1
-                    middle_pages = [middle_start, middle_start + 1]
-
-                    for page_num in middle_pages:
-                        if 0 <= page_num < total_pages:
-                            try:
-                                page_text = pdf_reader.pages[page_num].extract_text()
-                                if page_text:
-                                    sample_text += page_text + " "
-                            except Exception:
-                                continue
-
-                    logger.debug(
-                        f"Extracted {len(sample_text)} chars from middle pages {middle_pages}"
-                    )
+            doc.close()
 
             # Clean up text (remove extra whitespace)
             sample_text = " ".join(sample_text.split())
@@ -1074,13 +953,9 @@ class DoclingParser:
             page_count = None
             if file_format == "pdf":
                 try:
-                    if USE_PYMUPDF:
-                        doc = fitz.open(filepath)
-                        page_count = len(doc)
-                        doc.close()
-                    else:
-                        reader = PdfReader(filepath)
-                        page_count = len(reader.pages)
+                    doc = fitz.open(filepath)
+                    page_count = len(doc)
+                    doc.close()
                     logger.info(f"Document has {page_count} pages")
                 except Exception as e:
                     logger.warning(f"Could not determine page count: {e}")
