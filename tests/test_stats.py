@@ -4,15 +4,12 @@ Test suite for stats.py - Statistics generation functionality
 Tests the actual statistics pipeline components without over-mocking.
 """
 
-import sys
 import tempfile
 from pathlib import Path
 
-# Add pipeline directory to path before importing
-sys.path.insert(0, str(Path(__file__).parent.parent / "pipeline"))
+import openpyxl
 
-import openpyxl  # noqa: E402
-from stats import StatsGenerator  # noqa: E402
+from pipeline.stats import StatsGenerator
 
 
 class TestStatsGenerator:

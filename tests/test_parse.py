@@ -4,15 +4,12 @@ Test suite for parse.py - Document parsing functionality
 Tests the actual parsing pipeline components without over-mocking.
 """
 
-import sys
 import tempfile
 from pathlib import Path
 
-# Add pipeline directory to path before importing
-sys.path.insert(0, str(Path(__file__).parent.parent / "pipeline"))
+import openpyxl
 
-import openpyxl  # noqa: E402
-from parse import DoclingParser  # noqa: E402
+from pipeline.parse import DoclingParser
 
 
 class TestDoclingParser:

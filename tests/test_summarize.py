@@ -4,15 +4,12 @@ Test suite for summarize.py - Document summarization functionality
 Tests the actual summarization pipeline components without over-mocking.
 """
 
-import sys
 import tempfile
 from pathlib import Path
 
-# Add pipeline directory to path before importing
-sys.path.insert(0, str(Path(__file__).parent.parent / "pipeline"))
+import openpyxl
 
-import openpyxl  # noqa: E402
-from summarize import (  # noqa: E402
+from pipeline.summarize import (
     DocumentSummarizer,
     clean_markdown_formatting,
     get_model_type,
