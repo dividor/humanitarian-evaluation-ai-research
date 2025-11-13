@@ -1,6 +1,14 @@
 # Humanitarian Evaluation AI Research Pipeline
 
+[![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![CI](https://github.com/YOUR-USERNAME/humanitarian-evaluation-ai-research/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR-USERNAME/humanitarian-evaluation-ai-research/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
 A data pipeline for parsing, summarizing, and analyzing humanitarian evaluation reports using AI-powered tools.
+
+As refered in Medium article [A Low-Cost Pipeline for Generating Abstracts of Humanitarian Evaluation Reports](https://medium.com/@astrobagel/a-low-cost-pipeline-for-generating-abstracts-of-humanitarian-evaluation-reports-4efe231cd4ea
+)
 
 ## Overview
 
