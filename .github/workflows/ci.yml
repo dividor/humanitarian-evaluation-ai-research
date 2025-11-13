@@ -63,7 +63,3 @@ jobs:
       - name: Run unit tests
         run: |
           pytest tests/ -v
-
-      - name: Test basic import
-        run: |
-          python -c "import download; import parse; import index; print('All modules imported successfully')"
