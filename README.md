@@ -6,8 +6,9 @@
 
 A data pipeline for parsing, summarizing, and analyzing humanitarian evaluation reports using AI-powered tools.
 
-As refered in Medium article [A Low-Cost Pipeline for Generating Abstracts of Humanitarian Evaluation Reports](https://medium.com/@astrobagel/a-low-cost-pipeline-for-generating-abstracts-of-humanitarian-evaluation-reports-4efe231cd4ea
-)
+As refered in Medium articles:
+
+- [A Low-Cost Pipeline for Generating Abstracts of Humanitarian Evaluation Reports](https://medium.com/@astrobagel/a-low-cost-pipeline-for-generating-abstracts-of-humanitarian-evaluation-reports-4efe231cd4ea)
 
 ## Overview
 

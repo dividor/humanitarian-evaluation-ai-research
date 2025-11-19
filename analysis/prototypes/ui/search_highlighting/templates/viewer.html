@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Viewer with Highlights</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            overflow: hidden;
+        }
+
+        #toolbar {
+            background: #2c3e50;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        #toolbar a {
+            color: #3498db;
+            text-decoration: none;
+            margin-right: 20px;
+        }
+
+        #toolbar a:hover {
+            text-decoration: underline;
+        }
+
+        #toolbar button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        #toolbar button:hover {
+            background: #2980b9;
+        }
+
+        #toolbar button:disabled {
+            background: #7f8c8d;
+            cursor: not-allowed;
+        }
+
+        #toolbar input {
+            width: 60px;
+            padding: 6px;
+            text-align: center;
+            border: 1px solid #34495e;
+            border-radius: 4px;
+        }
+
+        #pageInfo {
+            color: #ecf0f1;
+            font-size: 14px;
+        }
+
+        #viewer-container {
+            position: relative;
+            width: 100%;
+            height: calc(100vh - 60px);
+            overflow: auto;
+            background: #525659;
+        }
+
+        #page-container {
+            position: relative;
+            margin: 20px auto;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            background: white;
+        }
+
+        .pdfViewer .page {
+            position: relative;
+            margin: 0;
+        }
+
+        .textLayer {
+            position: absolute;
+            left: 0;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            overflow: hidden;
+            opacity: 1;
+            line-height: 1.0;
+        }
+
+        .textLayer > span {
+            color: transparent;
+            position: absolute;
+            white-space: pre;
+            cursor: text;
+            transform-origin: 0% 0%;
+        }
+
+        .textLayer ::selection {
+            background: rgb(0, 0, 255, 0.3);
+        }
+
+        .highlight-overlay {
+            position: absolute;
+            pointer-events: none;
+            background: rgba(255, 235, 59, 0.4);
+            border: 2px solid rgba(255, 193, 7, 0.8);
+            box-sizing: border-box;
+            z-index: 1;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: white;
+            font-size: 18px;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+    <div id="toolbar">
+        <a href="/">← Back to Search</a>
+        <button id="prev-page">Previous</button>
+        <span id="pageInfo">
+            Page <input type="number" id="pageInput" min="1" value="1"> of <span id="totalPages">-</span>
+        </span>
+        <button id="next-page">Next</button>
+        <button id="zoom-in">Zoom In</button>
+        <button id="zoom-out">Zoom Out</button>
+        <span style="margin-left: auto; color: #ecf0f1; font-size: 14px;">
+            <span id="highlight-count">0</span> highlights on this page
+        </span>
+    </div>
+
+    <div id="viewer-container">
+        <div class="loading">Loading PDF...</div>
+        <div id="page-container" style="display: none;"></div>
+    </div>
+
+    <script>
+        // Configuration from template
+        const DOC_ID = '{{ doc_id }}';
+        const urlParams = new URLSearchParams(window.location.search);
+        const INITIAL_PAGE = parseInt(urlParams.get('page')) || 1;
+        const SEARCH_TEXT = urlParams.get('text') || '';
+
+        // PDF.js setup
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // State
+        let pdfDoc = null;
+        let currentPage = INITIAL_PAGE;
+        let scale = 1.5;
+        let highlightData = [];
+
+        // Elements
+        const container = document.getElementById('page-container');
+        const viewerContainer = document.getElementById('viewer-container');
+        const pageInput = document.getElementById('pageInput');
+        const totalPagesSpan = document.getElementById('totalPages');
+        const highlightCountSpan = document.getElementById('highlight-count');
+
+        // Load PDF
+        async function loadPDF() {
+            try {
+                const url = `/api/pdf/${DOC_ID}`;
+                pdfDoc = await pdfjsLib.getDocument(url).promise;
+                totalPagesSpan.textContent = pdfDoc.numPages;
+
+                document.querySelector('.loading').style.display = 'none';
+                container.style.display = 'block';
+
+                // Load highlight data
+                await loadHighlightData();
+
+                // Render initial page
+                await renderPage(currentPage);
+
+            } catch (error) {
+                console.error('Error loading PDF:', error);
+                document.querySelector('.loading').textContent = 'Error loading PDF: ' + error.message;
+            }
+        }
+
+        // Load highlight data from backend
+        async function loadHighlightData() {
+            try {
+                const params = new URLSearchParams();
+                if (SEARCH_TEXT) params.append('text', SEARCH_TEXT);
+
+                const response = await fetch(`/api/highlight/${DOC_ID}?${params}`);
+                const data = await response.json();
+                highlightData = data.highlights || [];
+
+                console.log(`Loaded ${highlightData.length} highlight positions`);
+            } catch (error) {
+                console.error('Error loading highlights:', error);
+                highlightData = [];
+            }
+        }
+
+        // Render a page
+        async function renderPage(pageNum) {
+            const page = await pdfDoc.getPage(pageNum);
+
+            const viewport = page.getViewport({ scale: scale });
+
+            // Clear container
+            container.innerHTML = '';
+            container.style.width = viewport.width + 'px';
+            container.style.height = viewport.height + 'px';
+
+            // Create canvas for PDF rendering with high DPI support
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            // Scale for retina displays
+            const outputScale = window.devicePixelRatio || 1;
+            canvas.width = Math.floor(viewport.width * outputScale);
+            canvas.height = Math.floor(viewport.height * outputScale);
+            canvas.style.width = Math.floor(viewport.width) + 'px';
+            canvas.style.height = Math.floor(viewport.height) + 'px';
+            canvas.style.display = 'block';
+
+            // Scale canvas context to match
+            const transform = outputScale !== 1
+                ? [outputScale, 0, 0, outputScale, 0, 0]
+                : null;
+
+            container.appendChild(canvas);
+
+            // Render PDF page with scaling
+            await page.render({
+                canvasContext: ctx,
+                viewport: viewport,
+                transform: transform
+            }).promise;
+
+            // Add text layer for selectability
+            const textLayerDiv = document.createElement('div');
+            textLayerDiv.className = 'textLayer';
+            textLayerDiv.style.width = viewport.width + 'px';
+            textLayerDiv.style.height = viewport.height + 'px';
+            container.appendChild(textLayerDiv);
+
+            const textContent = await page.getTextContent();
+            pdfjsLib.renderTextLayer({
+                textContent: textContent,
+                container: textLayerDiv,
+                viewport: viewport,
+                textDivs: []
+            });
+
+            // Add highlights on top
+            addHighlights(pageNum, viewport);
+
+            // Update UI
+            pageInput.value = pageNum;
+            currentPage = pageNum;
+            updateButtons();
+        }
+
+        // Add highlight overlays
+        function addHighlights(pageNum, viewport) {
+            const pageHighlights = highlightData.filter(h => h.page === pageNum);
+            highlightCountSpan.textContent = pageHighlights.length;
+
+            // Margin to add around bounding boxes (in PDF points)
+            const margin = 2;
+
+            pageHighlights.forEach(highlight => {
+                const bbox = highlight.bbox;
+
+                // Convert PDF coordinates (bottom-left origin) to canvas coordinates (top-left origin)
+                // Add margin to bbox
+                const x = (bbox.l - margin) * scale;
+                const y = (viewport.height / scale - bbox.t - margin) * scale;
+                const width = ((bbox.r - bbox.l) + (margin * 2)) * scale;
+                const height = ((bbox.t - bbox.b) + (margin * 2)) * scale;
+
+                // Create highlight div
+                const highlightDiv = document.createElement('div');
+                highlightDiv.className = 'highlight-overlay';
+                highlightDiv.style.left = x + 'px';
+                highlightDiv.style.top = y + 'px';
+                highlightDiv.style.width = width + 'px';
+                highlightDiv.style.height = height + 'px';
+                highlightDiv.title = highlight.text; // Tooltip showing matched text
+
+                container.appendChild(highlightDiv);
+            });
+        }
+
+        // Navigation
+        function updateButtons() {
+            document.getElementById('prev-page').disabled = currentPage <= 1;
+            document.getElementById('next-page').disabled = currentPage >= pdfDoc.numPages;
+        }
+
+        document.getElementById('prev-page').addEventListener('click', () => {
+            if (currentPage > 1) {
+                renderPage(currentPage - 1);
+            }
+        });
+
+        document.getElementById('next-page').addEventListener('click', () => {
+            if (currentPage < pdfDoc.numPages) {
+                renderPage(currentPage + 1);
+            }
+        });
+
+        pageInput.addEventListener('change', (e) => {
+            const pageNum = parseInt(e.target.value);
+            if (pageNum >= 1 && pageNum <= pdfDoc.numPages) {
+                renderPage(pageNum);
+            } else {
+                e.target.value = currentPage;
+            }
+        });
+
+        // Zoom
+        document.getElementById('zoom-in').addEventListener('click', () => {
+            scale += 0.25;
+            renderPage(currentPage);
+        });
+
+        document.getElementById('zoom-out').addEventListener('click', () => {
+            if (scale > 0.5) {
+                scale -= 0.25;
+                renderPage(currentPage);
+            }
+        });
+
+        // Initialize
+        loadPDF();
+    </script>
+</body>
+</html>
