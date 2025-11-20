@@ -39,17 +39,22 @@ body {
   color: white;
   padding: 20px 40px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .header h1 {
   margin: 0 0 20px 0;
   font-size: 28px;
+  text-align: center;
 }
 
 .search-form {
   display: flex;
   gap: 10px;
   max-width: 800px;
+  width: 100%;
 }
 
 .search-input {
@@ -85,13 +90,29 @@ body {
 
 /* Main Content */
 .main-content {
-  display: flex;
-  flex: 1;
+  display: grid;
   gap: 20px;
   padding: 20px;
-  max-width: 1400px;
+  max-width: 1800px;
   margin: 0 auto;
   width: 100%;
+  align-items: start;
+}
+
+/* Three column layout when showing results + PDF */
+.main-content.with-results.with-pdf {
+  grid-template-columns: 250px 1fr 650px;
+}
+
+/* Two column layout when showing results but no PDF */
+.main-content.with-results.no-pdf {
+  grid-template-columns: 250px 1fr;
+}
+
+/* Single column centered when no results (welcome screen) */
+.main-content.no-results {
+  grid-template-columns: 1fr;
+  max-width: 1200px;
 }
 
 /* Filters */
@@ -104,6 +125,11 @@ body {
   height: fit-content;
   position: sticky;
   top: 20px;
+}
+
+/* Hide filters on welcome screen */
+.main-content.no-results .filters {
+  display: none;
 }
 
 .filters h3 {
@@ -147,8 +173,7 @@ body {
 
 /* Results */
 .results {
-  flex: 1;
-  max-width: 800px;
+  min-width: 0;
 }
 
 .results-header {
@@ -175,10 +200,14 @@ body {
   margin: 0 0 12px 0;
   font-size: 18px;
   color: #333;
-  cursor: pointer;
 }
 
-.result-card h3:hover {
+.result-title {
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.result-title:hover {
   color: #667eea;
 }
 
@@ -216,22 +245,25 @@ body {
   line-height: 1.6;
 }
 
+/* Welcome Screen */
 .welcome {
-  background: white;
-  padding: 40px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   text-align: center;
+  max-width: 600px;
+  margin: 100px auto;
 }
 
 .welcome h2 {
-  margin: 0 0 16px 0;
+  margin: 0 0 20px 0;
   color: #333;
+  font-size: 24px;
+  font-weight: 600;
 }
 
 .welcome p {
   color: #666;
-  line-height: 1.6;
+  line-height: 1.8;
+  font-size: 16px;
+  margin: 10px 0;
 }
 
 .no-results {
@@ -248,8 +280,8 @@ body {
   width: 650px;
   background: white;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  height: 80vh;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+  height: calc(100vh - 60px);
   position: sticky;
   top: 20px;
   overflow: hidden;
@@ -291,84 +323,97 @@ body {
   background: #f5f5f5;
 }
 
-.pdf-viewer-toolbar {
-  background: #2c3e50;
+.pdf-viewer-header {
+  background: #34495e;
   color: white;
-  padding: 15px 20px;
-  display: flex;
-  align-items: center;
-  gap: 15px;
+  padding: 16px 20px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   flex-shrink: 0;
 }
 
-.pdf-viewer-toolbar h4 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 500;
+.pdf-viewer-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
 }
 
-.pdf-viewer-toolbar .close-button {
-  background: #e74c3c;
+.pdf-viewer-title-row h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 12px;
+}
+
+.pdf-viewer-header .close-button {
+  background: none;
   border: none;
   color: white;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 18px;
+  font-size: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s;
 }
 
-.pdf-viewer-toolbar .close-button:hover {
-  background: #c0392b;
+.pdf-viewer-header .close-button:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
-.pdf-viewer-toolbar button {
+.pdf-viewer-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pdf-viewer-controls button {
   background: #3498db;
   color: white;
   border: none;
-  padding: 8px 16px;
+  padding: 6px 14px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
+  flex-shrink: 0;
+  transition: background 0.2s;
 }
 
-.pdf-viewer-toolbar button:hover:not(:disabled) {
+.pdf-viewer-controls button:hover:not(:disabled) {
   background: #2980b9;
 }
 
-.pdf-viewer-toolbar button:disabled {
-  background: #7f8c8d;
+.pdf-viewer-controls button:disabled {
+  background: #95a5a6;
   cursor: not-allowed;
-}
-
-.toolbar-spacer {
-  flex: 1;
+  opacity: 0.6;
 }
 
 .page-info {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 14px;
+  font-size: 13px;
+  flex-shrink: 0;
 }
 
 .page-input {
-  width: 60px;
-  padding: 6px;
+  width: 50px;
+  padding: 4px 6px;
   text-align: center;
   border: 1px solid #34495e;
-  border-radius: 4px;
+  border-radius: 3px;
   background: white;
-}
-
-.highlight-info {
-  font-size: 14px;
-  color: #ecf0f1;
-  margin-left: 15px;
+  font-size: 13px;
+  color: #333;
 }
 
 .pdf-viewer-content {
@@ -435,9 +480,33 @@ body {
 }
 
 /* Responsive */
+@media (max-width: 1400px) {
+  .main-content {
+    grid-template-columns: 1fr;
+  }
+
+  .main-content.no-pdf {
+    grid-template-columns: 250px 1fr;
+  }
+
+  .filters {
+    position: static;
+  }
+
+  .pdf-viewer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 50vw;
+    height: 100vh;
+    z-index: 1000;
+    border-radius: 0;
+  }
+}
+
 @media (max-width: 768px) {
   .main-content {
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
 
   .filters {
@@ -447,6 +516,6 @@ body {
 
   .pdf-viewer {
     width: 100%;
-    height: 60vh;
+    height: 100vh;
   }
 }

@@ -37,25 +37,44 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const pageContainerRef = useRef<HTMLDivElement>(null);
 
-  // Load PDF.js library
+  // Update current page when pageNum prop changes
   useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-    script.async = true;
-    script.onload = () => {
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-      loadPDF();
-    };
-    document.body.appendChild(script);
+    console.log('PDFViewer: pageNum changed to', pageNum);
+    setCurrentPage(pageNum);
+  }, [pageNum]);
 
-    return () => {
-      document.body.removeChild(script);
+  // Load PDF when docId changes
+  useEffect(() => {
+    console.log('PDFViewer: docId changed to', docId);
+    const initPDF = async () => {
+      if (window.pdfjsLib) {
+        // Already loaded, just load the PDF
+        await loadPDF();
+        return;
+      }
+
+      // Load PDF.js library first time only
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      script.async = true;
+      script.onload = async () => {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        await loadPDF();
+      };
+      script.onerror = () => {
+        setError('Failed to load PDF.js library');
+        setLoading(false);
+      };
+      document.body.appendChild(script);
     };
+
+    initPDF();
   }, [docId]);
 
-  // Load highlight data
+  // Load highlight data when docId or searchText changes
   useEffect(() => {
+    console.log('PDFViewer: loading highlights for', docId, searchText);
     loadHighlights();
   }, [docId, searchText]);
 
@@ -67,7 +86,11 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
   }, [currentPage, scale, pdfDoc, highlights]);
 
   const loadPDF = async () => {
+    setLoading(true);
+    setError(null);
+
     try {
+      console.log('Loading PDF:', docId, 'page:', pageNum);
       const url = `${API_BASE_URL}/pdf/${docId}`;
       const loadingTask = window.pdfjsLib.getDocument(url);
       const pdf = await loadingTask.promise;
@@ -75,6 +98,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
       setPdfDoc(pdf);
       setTotalPages(pdf.numPages);
       setLoading(false);
+      console.log('PDF loaded, total pages:', pdf.numPages);
     } catch (err: any) {
       console.error('Error loading PDF:', err);
       setError(`Failed to load PDF: ${err.message}`);
@@ -256,37 +280,31 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
 
   return (
     <div className="pdf-viewer-container">
-      <div className="pdf-viewer-toolbar">
-        <button onClick={onClose} className="close-button">✕</button>
-        <h4>{title}</h4>
-        <div className="toolbar-spacer" />
-        <button onClick={goToPrevPage} disabled={currentPage <= 1}>
-          Previous
-        </button>
-        <span className="page-info">
-          Page{' '}
-          <input
-            type="number"
-            min="1"
-            max={totalPages}
-            value={currentPage}
-            onChange={handlePageInput}
-            className="page-input"
-          />
-          {' '}of {totalPages}
-        </span>
-        <button onClick={goToNextPage} disabled={currentPage >= totalPages}>
-          Next
-        </button>
-        <button onClick={zoomOut} disabled={scale <= 0.5}>
-          Zoom Out
-        </button>
-        <button onClick={zoomIn}>
-          Zoom In
-        </button>
-        <span className="highlight-info">
-          {highlightCount} highlight{highlightCount !== 1 ? 's' : ''} on this page
-        </span>
+      <div className="pdf-viewer-header">
+        <div className="pdf-viewer-title-row">
+          <h4 title={title}>{title}</h4>
+          <button onClick={onClose} className="close-button" title="Close">✕</button>
+        </div>
+        <div className="pdf-viewer-controls">
+          <button onClick={goToPrevPage} disabled={currentPage <= 1}>
+            Previous
+          </button>
+          <span className="page-info">
+            Page{' '}
+            <input
+              type="number"
+              min="1"
+              max={totalPages}
+              value={currentPage}
+              onChange={handlePageInput}
+              className="page-input"
+            />
+            {' '}of {totalPages}
+          </span>
+          <button onClick={goToNextPage} disabled={currentPage >= totalPages}>
+            Next
+          </button>
+        </div>
       </div>
 
       <div className="pdf-viewer-content" ref={containerRef}>

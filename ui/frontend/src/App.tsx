@@ -56,7 +56,7 @@ function App() {
     <div className="app">
       {/* Header */}
       <header className="header">
-        <h1>🌍 Humanitarian Evaluation Search</h1>
+        <h1>Humanitarian Evaluation Search</h1>
         <form onSubmit={handleSearch} className="search-form">
           <input
             type="text"
@@ -71,67 +71,69 @@ function App() {
         </form>
       </header>
 
-      <div className="main-content">
-        {/* Filters Sidebar */}
-        <aside className="filters">
-          <h3>Filters</h3>
+      <div className={`main-content ${results.length > 0 ? 'with-results' : 'no-results'} ${selectedDoc ? 'with-pdf' : 'no-pdf'}`}>
+        {/* Filters Sidebar - only show when we have results */}
+        {results.length > 0 && (
+          <aside className="filters">
+            <h3>Filters</h3>
 
-          {facets && (
-            <>
-              <div className="filter-group">
-                <label>Organization</label>
-                <select
-                  value={filters.organization || ''}
-                  onChange={(e) => handleFilterChange('organization', e.target.value)}
+            {facets && (
+              <>
+                <div className="filter-group">
+                  <label>Organization</label>
+                  <select
+                    value={filters.organization || ''}
+                    onChange={(e) => handleFilterChange('organization', e.target.value)}
+                  >
+                    <option value="">All</option>
+                    {facets.organizations.slice(0, 20).map(f => (
+                      <option key={f.value} value={f.value}>
+                        {f.value} ({f.count})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="filter-group">
+                  <label>Year</label>
+                  <select
+                    value={filters.year || ''}
+                    onChange={(e) => handleFilterChange('year', e.target.value)}
+                  >
+                    <option value="">All</option>
+                    {facets.years.slice(0, 10).map(f => (
+                      <option key={f.value} value={f.value}>
+                        {f.value} ({f.count})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="filter-group">
+                  <label>Evaluation Type</label>
+                  <select
+                    value={filters.evaluation_type || ''}
+                    onChange={(e) => handleFilterChange('evaluation_type', e.target.value)}
+                  >
+                    <option value="">All</option>
+                    {facets.evaluation_types.slice(0, 10).map(f => (
+                      <option key={f.value} value={f.value}>
+                        {f.value} ({f.count})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  onClick={() => setFilters({})}
+                  className="clear-filters"
                 >
-                  <option value="">All</option>
-                  {facets.organizations.slice(0, 20).map(f => (
-                    <option key={f.value} value={f.value}>
-                      {f.value} ({f.count})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="filter-group">
-                <label>Year</label>
-                <select
-                  value={filters.year || ''}
-                  onChange={(e) => handleFilterChange('year', e.target.value)}
-                >
-                  <option value="">All</option>
-                  {facets.years.slice(0, 10).map(f => (
-                    <option key={f.value} value={f.value}>
-                      {f.value} ({f.count})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="filter-group">
-                <label>Evaluation Type</label>
-                <select
-                  value={filters.evaluation_type || ''}
-                  onChange={(e) => handleFilterChange('evaluation_type', e.target.value)}
-                >
-                  <option value="">All</option>
-                  {facets.evaluation_types.slice(0, 10).map(f => (
-                    <option key={f.value} value={f.value}>
-                      {f.value} ({f.count})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                onClick={() => setFilters({})}
-                className="clear-filters"
-              >
-                Clear Filters
-              </button>
-            </>
-          )}
-        </aside>
+                  Clear Filters
+                </button>
+              </>
+            )}
+          </aside>
+        )}
 
         {/* Results */}
         <main className="results">
@@ -142,8 +144,14 @@ function App() {
           )}
 
           {results.map((result) => (
-            <div key={result.chunk_id} className="result-card">
-              <h3 onClick={() => setSelectedDoc(result)} style={{ cursor: 'pointer' }}>
+            <div key={result.chunk_id} className="result-card" data-doc-id={result.doc_id} data-page={result.page_num}>
+              <h3
+                onClick={() => {
+                  console.log('Clicked result:', result.doc_id, 'page:', result.page_num);
+                  setSelectedDoc(result);
+                }}
+                className="result-title"
+              >
                 {result.title}
               </h3>
               <div className="result-meta">
