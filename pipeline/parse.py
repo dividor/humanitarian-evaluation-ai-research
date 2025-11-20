@@ -8,6 +8,10 @@ import multiprocessing
 import os
 import signal
 import sys
+
+# Add parent directory to path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import tempfile
 from pathlib import Path
 
@@ -24,6 +28,9 @@ from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.pipeline.standard_pdf_pipeline import StandardPdfPipeline
 from docling_core.types.doc.base import ImageRefMode
 from hierarchical.postprocessor import ResultPostprocessor
+
+from pipeline.db import db
+from pipeline.utils import generate_doc_id
 
 # Page separator pattern for markdown output
 # Note: Docling's page_break_placeholder doesn't support dynamic page numbers yet
@@ -1462,6 +1469,46 @@ class DoclingParser:
         # Only write parsing_error if it's not None and not empty string
         ws.cell(row_idx, parsing_error_col, parsing_error if parsing_error else "")
 
+    def process_document(self, filepath):
+        """
+        Process a single document and return the result.
+        Wrapper around internal parsing logic.
+        """
+        try:
+            # Create output folder
+            output_folder = self.create_output_folder(filepath)
+
+            # Determine if we should use chunking
+            use_chunking = self.enable_chunking and self.should_chunk_pdf(filepath)
+
+            if use_chunking:
+                logger.info(f"Processing with chunking: {filepath}")
+                markdown_path, toc, pages, words, lang, fmt = (
+                    self.parse_pdf_with_chunking(filepath, output_folder)
+                )
+            else:
+                logger.info(f"Processing standard: {filepath}")
+                markdown_path, toc, pages, words, lang, fmt = (
+                    self.parse_pdf_with_docling(filepath, output_folder)
+                )
+
+            if markdown_path:
+                return {
+                    "success": True,
+                    "output_dir": output_folder,
+                    "toc": toc,
+                    "pages": pages,
+                    "words": words,
+                    "language": lang,
+                    "format": fmt,
+                }
+            else:
+                return {"success": False, "error": "Parsing returned None"}
+
+        except Exception as e:
+            logger.error(f"Error processing document {filepath}: {e}")
+            return {"success": False, "error": str(e)}
+
     def parse_all(self, year=None, agency=None, force_parse=False):
         """
         Parse all PDFs based on metadata and filters.
@@ -1639,113 +1686,60 @@ class DoclingParser:
 
 
 def main():
-    """
-    Main function to run the PDF parser from command line.
+    parser = DoclingParser()
 
-    Parses command-line arguments and executes the parsing pipeline.
-    """
-    parser = argparse.ArgumentParser(
-        description="Parse PDFs using Docling with metadata tracking"
-    )
-    parser.add_argument(
-        "--metadata",
-        default="./data/pdf_metadata.xlsx",
-        help="Path to metadata Excel file",
-    )
-    parser.add_argument(
-        "--output", default="./data/parsed", help="Output directory for parsed files"
-    )
-    parser.add_argument("--year", type=int, help="Filter by year")
-    parser.add_argument("--agency", help="Filter by agency")
-    parser.add_argument(
-        "--force-parse",
-        action="store_true",
-        help="Force parsing even if already parsed",
-    )
-    parser.add_argument(
-        "--pipeline", default="standard", help="Docling pipeline (default: standard)"
-    )
-    parser.add_argument(
-        "--ocr-engine", default="rapidocr", help="OCR engine (default: rapidocr)"
-    )
-    parser.add_argument(
-        "--ocr-lang", default="en,fr,es,pt", help="OCR languages (default: en,fr,es,pt)"
-    )
-    parser.add_argument(
-        "--pdf-backend", default="dlparse_v4", help="PDF backend (default: dlparse_v4)"
-    )
-    parser.add_argument(
-        "--table-mode",
-        default="fast",
-        choices=["fast", "accurate"],
-        help="Table extraction mode (default: fast)",
-    )
-    parser.add_argument(
-        "--ocr", action="store_true", help="Enable OCR (disabled by default)"
-    )
-    parser.add_argument(
-        "--enrich-picture-description",
-        action="store_true",
-        help="Enable AI picture descriptions",
-    )
-    parser.add_argument(
-        "--images-scale",
-        type=float,
-        default=1.0,
-        help="Image resolution scale (default: 1.0, use 2.0-3.0 for higher quality)",
-    )
-    parser.add_argument(
-        "--enable-chunking",
-        action="store_true",
-        default=True,
-        help="Enable chunking for large PDFs (default: enabled)",
-    )
-    parser.add_argument(
-        "--disable-chunking",
-        action="store_true",
-        help="Disable chunking (not recommended for large PDFs)",
-    )
-    parser.add_argument(
-        "--chunk-size",
-        type=int,
-        default=50,
-        help="Pages per chunk when chunking is enabled (default: 50)",
-    )
-    parser.add_argument(
-        "--chunk-threshold",
-        type=int,
-        default=200,
-        help="Minimum pages to trigger chunking (default: 200)",
-    )
-    parser.add_argument(
-        "--chunk-timeout",
-        type=int,
-        default=300,
-        help="Timeout in seconds for processing each chunk (default: 300 = 5 minutes)",
-    )
+    # Get documents to parse from Qdrant
+    logger.info("Fetching 'downloaded' documents from Qdrant...")
+    docs_to_parse = db.get_documents_by_status("downloaded")
 
-    args = parser.parse_args()
+    if not docs_to_parse:
+        logger.info("No documents found with status 'downloaded'.")
+        return
 
-    docling_parser = DoclingParser(
-        metadata_path=args.metadata,
-        output_dir=args.output,
-        pipeline=args.pipeline,
-        ocr_engine=args.ocr_engine,
-        ocr_lang=args.ocr_lang,
-        pdf_backend=args.pdf_backend,
-        table_mode=args.table_mode,
-        no_ocr=not args.ocr,  # Invert: --ocr flag means no_ocr=False
-        enrich_picture_description=args.enrich_picture_description,
-        images_scale=args.images_scale,
-        enable_chunking=not args.disable_chunking,
-        chunk_size=args.chunk_size,
-        chunk_threshold=args.chunk_threshold,
-        chunk_timeout=args.chunk_timeout,
-    )
+    logger.info(f"Found {len(docs_to_parse)} documents to parse.")
 
-    docling_parser.parse_all(
-        year=args.year, agency=args.agency, force_parse=args.force_parse
-    )
+    for doc in docs_to_parse:
+        doc_id = generate_doc_id(doc.get("url") or doc.get("filepath"))
+        filepath = doc.get("filepath")
+
+        if not filepath or not os.path.exists(filepath):
+            logger.warning(f"File not found for {doc.get('title')}: {filepath}")
+            db.update_document(
+                doc_id, {"status": "parse_failed", "error": "File not found"}
+            )
+            continue
+
+        logger.info(f"Processing: {doc.get('title')}")
+
+        try:
+            # Parse the document
+            result = parser.process_document(filepath)
+
+            if result["success"]:
+                # Update Qdrant
+                # result['output_dir'] is the folder containing the parsed JSON
+                db.update_document(
+                    doc_id,
+                    {
+                        "status": "parsed",
+                        "parsed_folder": str(result["output_dir"]),
+                        "toc": result.get("toc", ""),
+                    },
+                )
+                logger.info(f"Successfully parsed {doc.get('title')}")
+            else:
+                db.update_document(
+                    doc_id,
+                    {
+                        "status": "parse_failed",
+                        "error": result.get("error", "Unknown error"),
+                    },
+                )
+                logger.error(f"Failed to parse {doc.get('title')}")
+
+        except Exception as e:
+            logger.error(f"Exception parsing {doc.get('title')}: {e}")
+            db.update_document(doc_id, {"status": "parse_failed", "error": str(e)})
 
 
 if __name__ == "__main__":

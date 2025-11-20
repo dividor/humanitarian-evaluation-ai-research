@@ -3,6 +3,10 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# Temporary development directory (NEVER commit)
+tmp/
+./tmp/
+
 # C extensions
 *.so
 
@@ -226,3 +230,4 @@ data
 
 nohup.out
 pipeline/download.py
+./tmp

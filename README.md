@@ -14,9 +14,12 @@ As refered in Medium articles:
 
 This project provides a streamlined data pipeline for processing humanitarian evaluation reports with the following components:
 
-1. **parse.py** - Parse documents (PDF, DOCX) and extract structured content with table of contents
-2. **summarize.py** - Generate extractive and abstractive summaries using embeddings and LLMs
-3. **stats.py** - Generate organization statistics and visualizations from parsed documents
+1. **Qdrant Database** - Vector database for document metadata and status tracking
+2. **parse.py** - Parse documents (PDF, DOCX) and extract structured content with table of contents
+3. **summarize.py** - Generate extractive and abstractive summaries using embeddings and LLMs
+4. **stats.py** - Generate organization statistics and visualizations from Qdrant database
+
+The pipeline uses **Docker Compose** for easy deployment with Qdrant database integration.
 
 ![Pipeline Diagram](./assets/pipeline.png)
 
@@ -37,7 +40,144 @@ The `data/` directory includes sample results from processing UNEG evaluation re
 
 ## Quick Start
 
-### 1. Set up Virtual Environment
+You can run the pipeline either locally with a virtual environment or using Docker.
+
+### Option A: Docker (Recommended)
+
+Docker provides an isolated, reproducible environment with all dependencies pre-installed.
+
+#### 1. Prerequisites
+
+- Docker and Docker Compose installed
+- HuggingFace API token (for summarization)
+
+#### 2. Set Environment Variables
+
+```bash
+# Copy example environment file
+cp .env.example .env
+
+# Edit .env and add your credentials:
+# - HUGGINGFACE_API_KEY for LLM summarization
+```
+
+**HuggingFace API Key (Required for LLM Summarization):**
+- Get your token at: https://huggingface.co/settings/tokens
+- **IMPORTANT**: Your token must have "Inference Provider" permissions enabled
+- Add the token to your `.env` file: `HUGGINGFACE_API_KEY=hf_...`
+
+#### 3. Build and Start Services
+
+```bash
+# Build the Docker image and start services
+docker compose up -d
+
+# Check that services are running
+docker compose ps
+```
+
+This starts two containers:
+- **qdrant**: Vector database for document metadata (ports 6333, 6334)
+- **pipeline**: Python environment for running pipeline scripts
+
+#### 4. Run the Pipeline
+
+All pipeline commands run inside the `pipeline` container using `docker compose exec`:
+
+```bash
+# Download documents (if you have a download script)
+docker compose exec pipeline python pipeline/download.py
+
+# Parse documents (extracts text, headings, creates markdown)
+docker compose exec pipeline python pipeline/parse.py
+
+# Generate summaries (extractive + abstractive with LLMs)
+docker compose exec pipeline python pipeline/summarize.py
+
+# Force re-summarize all documents (ignore status filtering)
+docker compose exec pipeline python pipeline/summarize.py --force
+
+# Generate statistics and visualizations
+docker compose exec pipeline python scripts/stats.py
+```
+
+#### 5. Access Qdrant Dashboard
+
+The Qdrant web interface is available at http://localhost:6333/dashboard
+
+You can browse collections, view documents, and inspect the database.
+
+#### 6. Stop Services
+
+```bash
+# Stop containers (preserves data)
+docker compose down
+
+# Stop and remove all data (including Qdrant database)
+docker compose down -v
+```
+
+#### Docker File Structure
+
+```
+humanitarian-evaluation-ai-research/
+├── docker-compose.yml    # Service definitions
+├── Dockerfile            # Pipeline container image
+├── .env                  # Environment variables (create this)
+├── data/
+│   ├── db/              # Qdrant database (persisted)
+│   ├── pdfs/            # Your PDF/DOCX files
+│   ├── parsed/          # Parsed output (generated)
+│   └── summaries/       # Centralized summaries (generated)
+└── ...
+```
+
+**Note:** The `data/` directory is mounted as a volume, so all your PDFs and generated outputs persist between container restarts.
+
+#### Troubleshooting Docker
+
+**Check container logs:**
+```bash
+# View pipeline logs
+docker compose logs pipeline
+
+# View Qdrant logs
+docker compose logs qdrant
+
+# Follow logs in real-time
+docker compose logs -f pipeline
+```
+
+**Rebuild after code changes:**
+```bash
+# Rebuild the pipeline image
+docker compose build pipeline
+
+# Restart with new image
+docker compose up -d pipeline
+```
+
+**Access container shell:**
+```bash
+# Open bash inside the pipeline container
+docker compose exec pipeline bash
+
+# Then run commands directly
+python pipeline/parse.py
+exit
+```
+
+**Check Qdrant connection:**
+```bash
+# Test database connectivity
+docker compose exec pipeline python -c "from pipeline.db import db; print(list(db.get_all_documents())[:5])"
+```
+
+---
+
+### Option B: Local Virtual Environment
+
+#### 1. Set up Virtual Environment
 
 ```bash
 # Create virtual environment
@@ -50,7 +190,7 @@ source .venv/bin/activate
 .venv\Scripts\activate
 ```
 
-### 2. Install Dependencies
+#### 2. Install Dependencies
 
 ```bash
 # Install all requirements
@@ -59,11 +199,25 @@ pip install -r requirements.txt
 
 **Note:** The installation includes torch (~2GB) and related ML libraries for advanced PDF parsing with docling. The `docling-hierarchical-pdf` package provides improved heading hierarchy detection by analyzing PDF bookmarks, numbering patterns, and font styles.
 
-### 3. Prepare Metadata Sheet
+#### 3. Start Qdrant Database
+
+You need a Qdrant instance running for the pipeline to work:
+
+**Option 1: Docker (easiest):**
+```bash
+docker run -p 6333:6333 -p 6334:6334 \
+  -v $(pwd)/data/db:/qdrant/storage:z \
+  qdrant/qdrant
+```
+
+**Option 2: Local installation:**
+- Follow instructions at: https://qdrant.tech/documentation/quick-start/
+
+#### 4. Prepare Metadata Sheet
 
 **IMPORTANT:** Before running the pipeline, you need to populate a metadata spreadsheet with information about the documents you want to process, as well as placing the documents in the `./data` directory as described below.
 
-#### Create Your Metadata File
+##### Create Your Metadata File
 
 1. **Use the sample as a template:**
    ```bash
@@ -107,7 +261,7 @@ pip install -r requirements.txt
 
 **See `data/pdf_metadata_sample.xlsx` for a complete example with sample data.**
 
-### 4. Set Environment Variables
+#### 5. Set Environment Variables
 
 ```bash
 # Copy example environment file
@@ -127,7 +281,7 @@ export HF_TOKEN=your_token_here
   - This is required for using third-party inference providers (featherless-ai, novita)
 - Add the token to your `.env` file: `HF_TOKEN=hf_...`
 
-### 5. Run the Pipeline
+#### 6. Run the Pipeline
 
 ```bash
 # 1. Parse documents (extracts text, headings, creates markdown)
@@ -137,8 +291,10 @@ python pipeline/parse.py
 python pipeline/summarize.py
 
 # 3. Generate statistics and visualizations
-python pipeline/stats.py
+python scripts/stats.py
 ```
+
+---
 
 ## How the Metadata Sheet is Updated
 
@@ -512,11 +668,11 @@ LLM_MODEL = {
 
 ### stats.py
 
-Generates organization statistics from parsed metadata.
+Generates organization statistics from Qdrant database and creates Excel report.
 
 **Features:**
-- Creates a "Stats" tab in the metadata Excel file (positioned to the right of existing tabs)
-- Uses "Key Content Sections" column (populated by `summarize.py`) to determine if documents have summary sections
+- Reads document metadata from Qdrant vector database
+- Creates Excel workbook with statistics and visualizations
 - Calculates success rates by organization (parsing, TOC, summary sections)
 - Displays year ranges and comprehensive metrics per organization
 - **Creates Sankey diagram visualization** showing data flow through pipeline stages
@@ -524,50 +680,138 @@ Generates organization statistics from parsed metadata.
 **Usage:**
 
 ```bash
-# Generate stats for default metadata file
-python pipeline/stats.py
+# Docker:
+docker compose exec pipeline python scripts/stats.py
 
-# Or specify custom metadata file
-python pipeline/stats.py --metadata ./data/custom_metadata.xlsx
+# Local:
+python scripts/stats.py
+
+# Specify custom output file
+python scripts/stats.py --output ./reports/my_stats.xlsx
 ```
+
+**Output:**
+- Creates new Excel file (default: `./data/pipeline_stats.xlsx`)
+- **Stats** tab: Organization-level statistics table
+- **Stats Viz** tab: Embedded Sankey diagram
+- Also saves Sankey diagram as `./data/pipeline_sankey.png`
 
 **Stats Tab Columns:**
 1. Organization
 2. Start Year (earliest report year)
 3. End Year (latest report year)
 4. Total Number of PDFs
-5. % PDFs Parsed Successfully
-6. Number of PDFs Parsed Successfully
-7. % PDFs with Table of Contents
-8. Number of PDFs with Table of Contents
-9. % PDFs with Summary Section (from summarize.py detection)
-10. Number of PDFs with Summary Section
-11. % PDFs with Abstractive Summary
-12. Number of PDFs with Abstractive Summary
-13. Average Number of Pages per PDF (calculated from Page Count column)
-14. Average Number of Words per PDF (calculated from Word Count column)
+5. % PDFs Downloaded Successfully
+6. Number of PDFs Downloaded Successfully
+7. % PDFs Parsed Successfully
+8. Number of PDFs Parsed Successfully
+9. % PDFs with Table of Contents
+10. Number of PDFs with Table of Contents
+11. % PDFs with Summary Section (from summarize.py detection)
+12. Number of PDFs with Summary Section
+13. % PDFs with Abstractive Summary
+14. Number of PDFs with Abstractive Summary
+15. Average Number of Pages per PDF
+16. Average Number of Words per PDF
 
 **Visualizations:**
 - **Sankey Diagram**: Visual representation of data flow through the pipeline
-  - Shows how documents flow from organization → parse → TOC → summary
+  - Shows how documents flow from organization → download → parse → TOC → summary
   - Saved as `data/pipeline_sankey.png`
   - Embedded in "Stats Viz" tab in the Excel file
   - Requires `plotly` and `kaleido` packages
   - **Example**: See `data/pipeline_sankey.png` for visualization of UNEG reports (2023-Nov 2025)
 
 **Notes:**
-- Run `summarize.py` first to populate the summary columns
-- Statistics are generated based on data in the metadata sheet
+- Reads data from Qdrant database (no Excel input required)
+- Run after `parse.py` and `summarize.py` to get complete statistics
+
+### status.py
+
+Quick status checker to view pipeline progress.
+
+**Features:**
+- Shows total document count in Qdrant
+- Breaks down documents by status (downloaded, parsed, summarized, etc.)
+- Lists recently parsed documents
+- Useful for monitoring pipeline progress
+
+**Usage:**
+
+```bash
+# Docker:
+docker compose exec pipeline python scripts/status.py
+
+# Local:
+python scripts/status.py
+```
+
+**Example Output:**
+```
+============================================================
+QDRANT PIPELINE STATUS
+============================================================
+
+Total documents: 234
+
+Status breakdown:
+----------------------------------------
+  downloaded          :  15
+  parsed              :  89
+  summarized          : 120
+  parse_failed        :   5
+  summarize_failed    :   5
+
+Recently parsed (89 documents):
+----------------------------------------
+  • Evaluation of the Government of Seychelles...
+  • Lesotho United Nations Development Assistance...
+  ...
+
+============================================================
+```
 
 ## Data Pipeline Workflow
 
-### Complete Pipeline
+### Architecture Overview
+
+The pipeline uses **Qdrant vector database** to store and track document metadata and processing status:
+
+```
+Documents → Qdrant Database → Pipeline Scripts
+                ↓
+            Processing Status Tracking
+            (downloaded, parsed, summarized)
+```
+
+### Complete Pipeline (Docker)
 
 ```bash
-# 1. Prepare metadata file (manual step)
-# - Create data/pdf_metadata.xlsx with your reports
-# - See data/pdf_metadata_sample.xlsx for example
-# - Place PDF/DOCX files in data/pdfs/Agency/Year/
+# 1. Start services
+docker compose up -d
+
+# 2. Download documents (if applicable)
+docker compose exec pipeline python pipeline/download.py
+
+# 3. Parse documents
+docker compose exec pipeline python pipeline/parse.py
+
+# 4. Generate summaries
+docker compose exec pipeline python pipeline/summarize.py
+
+# 5. Generate statistics
+docker compose exec pipeline python scripts/stats.py
+
+# View results
+# - Check Qdrant dashboard: http://localhost:6333/dashboard
+# - Open Excel report: ./data/pipeline_stats.xlsx
+```
+
+### Complete Pipeline (Local)
+
+```bash
+# 1. Ensure Qdrant is running
+docker run -p 6333:6333 -v $(pwd)/data/db:/qdrant/storage:z qdrant/qdrant
 
 # 2. Parse documents
 python pipeline/parse.py
@@ -576,26 +820,35 @@ python pipeline/parse.py
 python pipeline/summarize.py
 
 # 4. Generate statistics
-python pipeline/stats.py
+python scripts/stats.py
 ```
 
 ## Project Structure
 
 ```
 humanitarian-evaluation-ai-research/
+├── docker-compose.yml        # Docker services configuration
+├── Dockerfile                # Pipeline container image
+├── .env                      # Environment variables (create this)
 ├── pipeline/
-│   ├── parse.py           # PDF/DOCX parser
-│   ├── summarize.py       # Summary generator
-│   └── stats.py           # Statistics generator
+│   ├── db.py                # Qdrant database interface
+│   ├── download.py          # Document downloader (optional)
+│   ├── parse.py             # PDF/DOCX parser
+│   ├── summarize.py         # Summary generator
+│   ├── chunk.py             # Text chunking utilities
+│   ├── index.py             # Vector indexing
+│   ├── search.py            # Semantic search
+│   └── migrate.py           # Database migrations
+├── scripts/
+│   ├── stats.py             # Statistics generator
+│   └── status.py            # Pipeline status checker
 ├── data/
-│   ├── pdf_metadata_sample.xlsx  # Sample metadata structure
-│   ├── pdf_metadata.xlsx         # Example: UNEG reports 2023-Nov 2025
-│   ├── pipeline_sankey.png       # Example: Sankey visualization
-│   ├── pdfs/                     # Your PDF/DOCX files
+│   ├── db/                  # Qdrant database storage
+│   ├── pdfs/                # Your PDF/DOCX files
 │   │   └── <Agency>/
 │   │       └── <Year>/
 │   │           └── <filename>.pdf
-│   ├── parsed/                   # Parsed output (generated)
+│   ├── parsed/              # Parsed output (generated)
 │   │   └── <Agency>/
 │   │       └── <Year>/
 │   │           └── <document_name>/
@@ -603,10 +856,10 @@ humanitarian-evaluation-ai-research/
 │   │               ├── *.json
 │   │               ├── toc.txt
 │   │               └── images/
-│   └── summaries/                # Centralized summaries (generated)
-├── requirements.txt       # Python dependencies
-├── .env                   # Environment variables (create this)
-└── README.md             # This file
+│   ├── summaries/           # Centralized summaries (generated)
+│   └── pipeline_stats.xlsx  # Statistics report (generated)
+├── requirements.txt         # Python dependencies
+└── README.md               # This file
 ```
 
 ## Configuration
@@ -615,7 +868,9 @@ humanitarian-evaluation-ai-research/
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| HF_TOKEN | - | HuggingFace API token with "Inference Provider" permissions (required for LLM summarization) |
+| HUGGINGFACE_API_KEY | - | HuggingFace API token with "Inference Provider" permissions (required for LLM summarization) |
+| QDRANT_HOST | localhost | Qdrant server host (use `qdrant` in Docker) |
+| QDRANT_PORT | 6333 | Qdrant server port |
 
 ### Customization
 

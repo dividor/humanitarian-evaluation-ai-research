@@ -16,6 +16,9 @@ import re
 import sys
 from pathlib import Path
 
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import nltk
 import numpy as np
 import openpyxl
@@ -24,6 +27,9 @@ from deep_translator import GoogleTranslator
 from dotenv import load_dotenv
 from nltk.tokenize import sent_tokenize
 from sentence_transformers import SentenceTransformer, util
+
+from pipeline.db import db
+from pipeline.utils import generate_doc_id
 
 # Load environment variables
 load_dotenv()
@@ -2123,36 +2129,104 @@ class DocumentSummarizer:
 
 def main():
     """
-    Main function to run the summarization pipeline from command line.
-
-    Parses command-line arguments and executes the summarization process.
+    Main function to run the summarization pipeline using Qdrant.
     """
-    parser = argparse.ArgumentParser(
-        description="Generate summaries for parsed documents"
-    )
-    parser.add_argument(
-        "--metadata",
-        default="./data/pdf_metadata.xlsx",
-        help="Path to metadata Excel file (default: ./data/pdf_metadata.xlsx)",
-    )
+    # Parse arguments
+    parser = argparse.ArgumentParser(description="Summarize parsed documents")
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Force re-summarization of all documents",
+        help="Process all documents regardless of status",
     )
-
     args = parser.parse_args()
 
-    # Check if metadata file exists
-    if not Path(args.metadata).exists():
-        logger.error("Metadata file not found: %s", args.metadata)
-        sys.exit(1)
+    # Get documents to summarize from Qdrant
+    if args.force:
+        logger.info("Fetching ALL documents from Qdrant (--force enabled)...")
+        docs_to_summarize = list(db.get_all_documents())
+    else:
+        logger.info("Fetching 'parsed' documents from Qdrant...")
+        docs_to_summarize = db.get_documents_by_status("parsed")
 
-    # Create summarizer
-    summarizer = DocumentSummarizer(metadata_path=args.metadata)
+    if not docs_to_summarize:
+        logger.info("No documents found.")
+        return
 
-    # Run summarization (LLM always enabled)
-    summarizer.summarize_all(force_summarize=args.force)
+    logger.info(f"Found {len(docs_to_summarize)} documents to summarize.")
+
+    # Create summarizer (we don't need metadata_path anymore, but class still expects it)
+    # We'll pass a dummy path since we're not using Excel
+    summarizer = DocumentSummarizer(metadata_path="./data/pdf_metadata.xlsx")
+
+    # Load models needed for summarization
+    summarizer.load_embedding_model()
+    summarizer.load_llm_model()
+
+    for doc in docs_to_summarize:
+        doc_id = generate_doc_id(doc.get("url") or doc.get("filepath"))
+        parsed_folder = doc.get("parsed_folder")
+        title = doc.get("title", "Unknown")
+
+        if not parsed_folder or not os.path.exists(parsed_folder):
+            logger.warning(f"Parsed folder not found for {title}: {parsed_folder}")
+            db.update_document(
+                doc_id,
+                {"status": "summarize_failed", "error": "Parsed folder not found"},
+            )
+            continue
+
+        logger.info(f"Summarizing: {title}")
+
+        try:
+            # Find the markdown file in the parsed folder
+            markdown_files = list(Path(parsed_folder).glob("*.md"))
+            if not markdown_files:
+                logger.warning(f"No markdown file found in {parsed_folder}")
+                db.update_document(
+                    doc_id, {"status": "summarize_failed", "error": "No markdown file"}
+                )
+                continue
+
+            markdown_path = str(markdown_files[0])
+
+            # Load markdown content
+            markdown_content = summarizer.load_markdown(markdown_path)
+            if not markdown_content:
+                logger.warning(f"Failed to load markdown from {markdown_path}")
+                db.update_document(
+                    doc_id,
+                    {"status": "summarize_failed", "error": "Failed to load markdown"},
+                )
+                continue
+
+            # Generate LLM summary
+            logger.info("Generating LLM summary...")
+            llm_summary_result, llm_chunked = summarizer.llm_summary(markdown_content)
+
+            if llm_summary_result:
+                # Save summary to file
+                summary_path = summarizer.save_llm_summary_centralized(
+                    markdown_path, llm_summary_result, "llm_summary"
+                )
+
+                # Update Qdrant with summary
+                db.update_document(
+                    doc_id, {"status": "summarized", "full_summary": llm_summary_result}
+                )
+                logger.info(f"Successfully summarized {title}")
+            else:
+                db.update_document(
+                    doc_id,
+                    {
+                        "status": "summarize_failed",
+                        "error": "LLM summary returned None",
+                    },
+                )
+                logger.error(f"Failed to summarize {title}")
+
+        except Exception as e:
+            logger.error(f"Exception summarizing {title}: {e}")
+            db.update_document(doc_id, {"status": "summarize_failed", "error": str(e)})
 
 
 if __name__ == "__main__":
