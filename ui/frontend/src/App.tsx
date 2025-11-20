@@ -12,6 +12,7 @@ function App() {
   const [filters, setFilters] = useState<SearchFilters>({});
   const [loading, setLoading] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<SearchResult | null>(null);
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
 
   // Load facets on mount
   useEffect(() => {
@@ -64,6 +65,19 @@ function App() {
     setSelectedDoc(null);
   };
 
+  const toggleCardExpansion = (chunkId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click from firing
+    setExpandedCards(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(chunkId)) {
+        newSet.delete(chunkId);
+      } else {
+        newSet.add(chunkId);
+      }
+      return newSet;
+    });
+  };
+
   const hasSearched = results.length > 0 || (query && !loading);
 
   return (
@@ -71,7 +85,7 @@ function App() {
       {/* Header - Purple gradient bar */}
       <header className={`header ${hasSearched ? 'header-compact' : 'header-hero'}`}>
         <div className="header-content">
-          <h1 className="header-title">Humanitarian Evaluation Search</h1>
+          <h1 className="header-title">ABC</h1>
           <form onSubmit={handleSearch} className="search-form">
             <input
               type="text"
@@ -91,7 +105,7 @@ function App() {
       {!hasSearched && (
         <div className="empty-state">
           <div className="empty-state-content">
-            <h2>Welcome to Humanitarian Evaluation Search</h2>
+            <h2>Welcome to ABC</h2>
             <p>
               Search through indexed evaluation reports using semantic search.
             </p>
@@ -105,7 +119,7 @@ function App() {
       {/* Results State */}
       {hasSearched && (
         <div className="main-container">
-          <div className={`content-wrapper ${selectedDoc ? 'with-preview' : ''}`}>
+          <div className="content-wrapper">
             {/* Left Column: Filters */}
             <aside className="filters-column">
               <div className="filters-card">
@@ -181,45 +195,79 @@ function App() {
                   </div>
 
                   <div className="results-list">
-                    {results.map((result) => (
-                      <div
-                        key={result.chunk_id}
-                        className={`result-card ${selectedDoc?.chunk_id === result.chunk_id ? 'result-card-selected' : ''}`}
-                        data-doc-id={result.doc_id}
-                        data-page={result.page_num}
-                        onClick={() => handleResultClick(result)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            handleResultClick(result);
-                          }
-                        }}
-                      >
-                        <h3 className="result-title result-title-link">{result.title}</h3>
+                    {results.map((result) => {
+                      const isExpanded = expandedCards.has(result.chunk_id);
+                      const snippetText = result.text;
+                      const displayText = isExpanded ? snippetText : snippetText.substring(0, 200);
 
-                        <div className="result-badges">
-                          {result.organization && (
-                            <span className="badge badge-org">{result.organization}</span>
-                          )}
-                          {result.year && (
-                            <span className="badge badge-year">{result.year}</span>
-                          )}
-                          <span className="badge badge-page">Page {result.page_num}</span>
-                          <span className="result-score">Score: {result.score.toFixed(3)}</span>
-                        </div>
+                      return (
+                        <div
+                          key={result.chunk_id}
+                          className={`result-card ${selectedDoc?.chunk_id === result.chunk_id ? 'result-card-selected' : ''}`}
+                          data-doc-id={result.doc_id}
+                          data-page={result.page_num}
+                        >
+                          <h3
+                            className="result-title result-title-link"
+                            onClick={() => handleResultClick(result)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                handleResultClick(result);
+                              }
+                            }}
+                          >
+                            {result.title}
+                          </h3>
 
-                        {result.headings.length > 0 && (
-                          <div className="result-breadcrumb">
-                            {result.headings.join(' › ')}
+                          <div className="result-badges">
+                            {result.organization && (
+                              <span className="badge badge-org">{result.organization}</span>
+                            )}
+                            {result.year && (
+                              <span className="badge badge-year">{result.year}</span>
+                            )}
+                            <span className="badge badge-page">Page {result.page_num}</span>
+                            <span className="result-score">Score: {result.score.toFixed(3)}</span>
                           </div>
-                        )}
 
-                        <p className="result-snippet">
-                          {result.text.substring(0, 200)}...
-                        </p>
-                      </div>
-                    ))}
+                          {result.headings.length > 0 && (
+                            <div className="result-breadcrumb">
+                              {result.headings.join(' › ')}
+                            </div>
+                          )}
+
+                          <p className="result-snippet">
+                            {displayText}
+                            {!isExpanded && snippetText.length > 200 && (
+                              <>
+                                ...{' '}
+                                <button
+                                  className="see-more-link"
+                                  onClick={(e) => toggleCardExpansion(result.chunk_id, e)}
+                                  aria-label="See more"
+                                >
+                                  See more
+                                </button>
+                              </>
+                            )}
+                            {isExpanded && snippetText.length > 200 && (
+                              <>
+                                {' '}
+                                <button
+                                  className="see-more-link"
+                                  onClick={(e) => toggleCardExpansion(result.chunk_id, e)}
+                                  aria-label="See less"
+                                >
+                                  See less
+                                </button>
+                              </>
+                            )}
+                          </p>
+                        </div>
+                      );
+                    })}
                   </div>
                 </>
               )}
@@ -233,15 +281,17 @@ function App() {
 
             {/* Right Column: Preview Panel */}
             {selectedDoc && (
-              <aside className="preview-panel">
-                <PDFViewer
-                  docId={selectedDoc.doc_id}
-                  pageNum={selectedDoc.page_num}
-                  searchText={selectedDoc.text}
-                  onClose={handleClosePreview}
-                  title={selectedDoc.title}
-                />
-              </aside>
+              <div className="preview-overlay" onClick={handleClosePreview}>
+                <div className="preview-panel" onClick={(e) => e.stopPropagation()}>
+                  <PDFViewer
+                    docId={selectedDoc.doc_id}
+                    pageNum={selectedDoc.page_num}
+                    searchText={query}
+                    onClose={handleClosePreview}
+                    title={selectedDoc.title}
+                  />
+                </div>
+              </div>
             )}
           </div>
         </div>

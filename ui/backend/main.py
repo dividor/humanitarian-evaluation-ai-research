@@ -28,6 +28,85 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Humanitarian Evaluation Search API")
 
+
+def infer_paragraphs_from_bboxes(text: str, bboxes: List[tuple]) -> str:
+    """
+    Infer paragraph breaks in text based on vertical gaps in bounding boxes.
+
+    Args:
+        text: The chunk text
+        bboxes: List of bbox tuples (l, t, r, b) for each text element
+
+    Returns:
+        Text with inferred line breaks based on bbox gaps
+    """
+    if not bboxes or len(bboxes) < 3:
+        return text
+
+    try:
+        # Sort bboxes by vertical position (top to bottom)
+        # bbox format: (l, t, r, b) where smaller t = higher on page
+        sorted_bboxes = sorted(bboxes, key=lambda b: b[1] if len(b) >= 2 else 0)
+
+        # Calculate vertical gaps between consecutive bboxes
+        gaps = []
+        for i in range(len(sorted_bboxes) - 1):
+            if len(sorted_bboxes[i]) >= 4 and len(sorted_bboxes[i + 1]) >= 2:
+                curr_bottom = sorted_bboxes[i][3]  # bottom of current
+                next_top = sorted_bboxes[i + 1][1]  # top of next
+                gap = abs(curr_bottom - next_top)
+                gaps.append(gap)
+
+        if not gaps or len(gaps) < 2:
+            return text
+
+        # Find threshold: gaps significantly larger than normal line spacing
+        sorted_gaps = sorted(gaps)
+        # Use 75th percentile as baseline for normal spacing
+        baseline_idx = int(len(sorted_gaps) * 0.75)
+        baseline_gap = sorted_gaps[baseline_idx]
+
+        # Threshold: 2.5x the baseline (paragraph breaks are much larger)
+        threshold = baseline_gap * 2.5
+
+        # Count significant gaps
+        large_gaps = [g for g in gaps if g > threshold]
+
+        logger.info(
+            f"Bbox analysis: {len(bboxes)} boxes, {len(large_gaps)} large gaps (threshold: {threshold:.2f})"
+        )
+
+        # If we found significant gaps, look for sentence breaks in the text
+        if large_gaps:
+            # Look for patterns that indicate paragraph breaks:
+            # 1. Period followed by space and capital letter
+            # 2. Period at end followed by newline
+            import re
+
+            # Find sentence boundaries
+            sentences = re.split(r"(\.\s+(?=[A-ZÁÉÍÓÚÑ]))", text)
+
+            if len(sentences) > 2:
+                # Rejoin with double newlines at major boundaries
+                # Heuristic: insert breaks roughly proportional to number of large gaps
+                break_frequency = max(2, len(sentences) // (len(large_gaps) + 1))
+
+                result_parts = []
+                for i, part in enumerate(sentences):
+                    result_parts.append(part)
+                    # Add paragraph break at sentence boundaries if we're past break frequency
+                    if i > 0 and i % (break_frequency * 2) == 0 and ". " in part:
+                        result_parts.append("\n\n")
+
+                return "".join(result_parts)
+
+        return text
+
+    except Exception as e:
+        logger.warning(f"Error inferring paragraphs from bboxes: {e}")
+        return text
+
+
 # CORS middleware for frontend
 app.add_middleware(
     CORSMiddleware,
@@ -170,11 +249,21 @@ async def search(
             ):
                 continue
 
-            # Build result
+            # Build result with inferred paragraphs
+            chunk_text = result.payload.get("text", "")
+            chunk_bboxes = result.payload.get("bbox", [])
+
+            # Ensure paragraph breaks are visible by replacing single \n with \n\n
+            # This creates blank lines between paragraphs
+            formatted_text = chunk_text.replace("\n", "\n\n")
+
+            # Also try to infer additional breaks from bboxes
+            formatted_text = infer_paragraphs_from_bboxes(formatted_text, chunk_bboxes)
+
             search_result = SearchResult(
                 chunk_id=str(result.id),
                 doc_id=doc_id,
-                text=result.payload.get("text", ""),
+                text=formatted_text,
                 page_num=result.payload.get("page_num", 0),
                 headings=result.payload.get("headings") or [],  # Handle None
                 score=result.score,

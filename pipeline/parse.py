@@ -1705,7 +1705,7 @@ def main():
         if not filepath or not os.path.exists(filepath):
             logger.warning(f"File not found for {doc.get('title')}: {filepath}")
             db.update_document(
-                doc_id, {"status": "parse_failed", "error": "File not found"}
+                doc_id, {"status": "parse_failed", "processing_error": "File not found"}
             )
             continue
 
@@ -1732,14 +1732,16 @@ def main():
                     doc_id,
                     {
                         "status": "parse_failed",
-                        "error": result.get("error", "Unknown error"),
+                        "processing_error": result.get("error", "Unknown error"),
                     },
                 )
                 logger.error(f"Failed to parse {doc.get('title')}")
 
         except Exception as e:
             logger.error(f"Exception parsing {doc.get('title')}: {e}")
-            db.update_document(doc_id, {"status": "parse_failed", "error": str(e)})
+            db.update_document(
+                doc_id, {"status": "parse_failed", "processing_error": str(e)}
+            )
 
 
 if __name__ == "__main__":

@@ -1,11 +1,8 @@
-import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, List
 
 from docling.chunking import HybridChunker
-from docling.datamodel.base_models import InputFormat
-from docling.document_converter import DocumentConverter
 from docling_core.types.doc import DoclingDocument
 
 # Configure logging
@@ -17,9 +14,11 @@ def chunk_document(doc_json_path: str) -> List[Dict[str, Any]]:
     """
     Load a Docling JSON document and split it into chunks using HybridChunker.
 
-    HybridChunker uses a hybrid approach with tokenization-aware refinements:
+    HybridChunker uses a hybrid approach with tokenization-aware
+    refinements:
     - First pass: splits chunks only when needed (oversized w.r.t. tokens)
-    - Second pass: merges chunks when possible (undersized successive chunks with same headings/captions)
+    - Second pass: merges chunks when possible (undersized successive
+      chunks with same headings/captions)
 
     Args:
         doc_json_path: Path to the Docling JSON file.
@@ -30,6 +29,9 @@ def chunk_document(doc_json_path: str) -> List[Dict[str, Any]]:
             - page_num: The page number(s) (1-indexed)
             - bbox: List of bounding boxes
             - headings: List of section headers
+
+    Raises:
+        RuntimeError: If chunk token length exceeds max_tokens (indicates tokenizer mismatch)
     """
     path = Path(doc_json_path)
     if not path.exists():
@@ -46,9 +48,10 @@ def chunk_document(doc_json_path: str) -> List[Dict[str, Any]]:
         # HybridChunker does TWO passes:
         #   1. Split oversized chunks
         #   2. Merge undersized successive chunks with same headings & captions
+        # IMPORTANT: Use the same tokenizer as the embedding model (BAAI/bge-small-en-v1.5)
         chunker = HybridChunker(
-            tokenizer="sentence-transformers/all-MiniLM-L6-v2",  # Tokenizer model for chunking
-            max_tokens=512,  # Reasonable chunk size for embeddings
+            tokenizer="BAAI/bge-small-en-v1.5",  # MUST match embedding model tokenizer
+            max_tokens=512,  # Max tokens for BAAI/bge-small-en-v1.5 model
             merge_peers=True,  # Enable merging of small chunks (default, but explicit)
         )
 

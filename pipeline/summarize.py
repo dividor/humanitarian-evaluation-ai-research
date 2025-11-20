@@ -2171,7 +2171,10 @@ def main():
             logger.warning(f"Parsed folder not found for {title}: {parsed_folder}")
             db.update_document(
                 doc_id,
-                {"status": "summarize_failed", "error": "Parsed folder not found"},
+                {
+                    "status": "summarize_failed",
+                    "processing_error": "Parsed folder not found",
+                },
             )
             continue
 
@@ -2183,7 +2186,11 @@ def main():
             if not markdown_files:
                 logger.warning(f"No markdown file found in {parsed_folder}")
                 db.update_document(
-                    doc_id, {"status": "summarize_failed", "error": "No markdown file"}
+                    doc_id,
+                    {
+                        "status": "summarize_failed",
+                        "processing_error": "No markdown file",
+                    },
                 )
                 continue
 
@@ -2195,7 +2202,10 @@ def main():
                 logger.warning(f"Failed to load markdown from {markdown_path}")
                 db.update_document(
                     doc_id,
-                    {"status": "summarize_failed", "error": "Failed to load markdown"},
+                    {
+                        "status": "summarize_failed",
+                        "processing_error": "Failed to load markdown",
+                    },
                 )
                 continue
 
@@ -2211,7 +2221,12 @@ def main():
 
                 # Update Qdrant with summary
                 db.update_document(
-                    doc_id, {"status": "summarized", "full_summary": llm_summary_result}
+                    doc_id,
+                    {
+                        "status": "summarized",
+                        "full_summary": llm_summary_result,
+                        "summarization_method": "llm_summary",
+                    },
                 )
                 logger.info(f"Successfully summarized {title}")
             else:
@@ -2219,14 +2234,16 @@ def main():
                     doc_id,
                     {
                         "status": "summarize_failed",
-                        "error": "LLM summary returned None",
+                        "processing_error": "LLM summary returned None",
                     },
                 )
                 logger.error(f"Failed to summarize {title}")
 
         except Exception as e:
             logger.error(f"Exception summarizing {title}: {e}")
-            db.update_document(doc_id, {"status": "summarize_failed", "error": str(e)})
+            db.update_document(
+                doc_id, {"status": "summarize_failed", "processing_error": str(e)}
+            )
 
 
 if __name__ == "__main__":

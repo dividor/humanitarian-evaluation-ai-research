@@ -24,6 +24,8 @@ services:
       - QDRANT_HOST=db
       - QDRANT_PORT=6333
       - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
+      - CHROME_BIN=/usr/bin/chromium
+      - CHROMEDRIVER_PATH=/usr/bin/chromedriver
     depends_on:
       - db
     networks:

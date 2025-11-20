@@ -101,8 +101,29 @@ def index_documents(limit: int = 10, force: bool = False):
             logger.warning(f"No chunks generated for {doc.get('title')}")
             continue
 
-        # 2. Embed chunks
+        # 2. Embed chunks and validate token lengths
         texts = [c["text"] for c in chunks]
+
+        # CRITICAL: Validate chunk token lengths before embedding
+        # This catches tokenizer mismatches between chunking and embedding
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained("BAAI/bge-small-en-v1.5")
+        max_allowed_tokens = 512
+
+        for idx, text in enumerate(texts):
+            token_count = len(tokenizer.encode(text, add_special_tokens=True))
+            if token_count > max_allowed_tokens:
+                error_msg = (
+                    f"CRITICAL ERROR: Chunk {idx} has {token_count} tokens, "
+                    f"exceeding max of {max_allowed_tokens}. "
+                    f"This indicates a tokenizer mismatch between chunking and embedding. "
+                    f"Document: {doc.get('title')} "
+                    f"Chunk preview: {text[:200]}..."
+                )
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
+
         dense_embeddings = list(dense_model.embed(texts))
         sparse_embeddings = list(sparse_model.embed(texts))
 
@@ -162,10 +183,14 @@ def index_documents(limit: int = 10, force: bool = False):
         # Generate document-level embedding
         doc_embedding = list(dense_model.embed([doc_text]))[0].tolist()
 
-        # 6. Update document in documents collection with embedding
+        # 6. Update document in documents collection with embedding and status
         try:
+            # Update with embedding and status
+            doc["status"] = "indexed"
             db.upsert_document(doc_id, doc, vector=doc_embedding)
-            logger.info(f"Updated document embedding for {doc.get('title')}")
+            logger.info(
+                f"Updated document embedding and status to 'indexed' for {doc.get('title')}"
+            )
         except Exception as e:
             logger.warning(f"Could not update document embedding for {doc_id}: {e}")
 

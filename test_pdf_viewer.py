@@ -89,6 +89,12 @@ def test_pdf_viewer_multiple_results():
 
         # Test clicking second result
         print("\n=== Testing Second Result ===")
+
+        # Close the first PDF viewer by clicking the close button
+        close_button = driver.find_element(By.CSS_SELECTOR, ".close-button")
+        close_button.click()
+        time.sleep(1)  # Wait for overlay to close
+
         second_result = result_cards[1]
         second_doc_id = second_result.get_attribute("data-doc-id")
         second_page = second_result.get_attribute("data-page")
@@ -139,6 +145,12 @@ def test_pdf_viewer_multiple_results():
         # Test clicking third result if available
         if len(result_cards) >= 3:
             print("\n=== Testing Third Result ===")
+
+            # Close the second PDF viewer
+            close_button = driver.find_element(By.CSS_SELECTOR, ".close-button")
+            close_button.click()
+            time.sleep(1)
+
             third_result = result_cards[2]
             third_doc_id = third_result.get_attribute("data-doc-id")
             third_page = third_result.get_attribute("data-page")
