@@ -58,13 +58,13 @@ def test_pdf_viewer_multiple_results():
         first_page = first_result.get_attribute("data-page")
         print(f"First result: doc_id={first_doc_id}, page={first_page}")
 
-        first_title = first_result.find_element(By.CSS_SELECTOR, ".result-title")
+        first_title = first_result.find_element(By.CSS_SELECTOR, ".result-title-link")
         first_title.click()
 
         # Wait for PDF viewer to appear
         print("Waiting for PDF viewer...")
         pdf_viewer = wait.until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, ".pdf-viewer"))
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".preview-panel"))
         )
 
         # Wait for PDF to load
@@ -94,7 +94,7 @@ def test_pdf_viewer_multiple_results():
         second_page = second_result.get_attribute("data-page")
         print(f"Second result: doc_id={second_doc_id}, page={second_page}")
 
-        second_title = second_result.find_element(By.CSS_SELECTOR, ".result-title")
+        second_title = second_result.find_element(By.CSS_SELECTOR, ".result-title-link")
         second_title.click()
 
         # Wait for PDF to update
@@ -144,7 +144,9 @@ def test_pdf_viewer_multiple_results():
             third_page = third_result.get_attribute("data-page")
             print(f"Third result: doc_id={third_doc_id}, page={third_page}")
 
-            third_title = third_result.find_element(By.CSS_SELECTOR, ".result-title")
+            third_title = third_result.find_element(
+                By.CSS_SELECTOR, ".result-title-link"
+            )
             third_title.click()
             time.sleep(3)
 
@@ -161,7 +163,7 @@ def test_pdf_viewer_multiple_results():
             print(f"Highlights on third PDF: {third_highlight_count}")
 
             # Verify PDF viewer still present
-            if driver.find_elements(By.CSS_SELECTOR, ".pdf-viewer"):
+            if driver.find_elements(By.CSS_SELECTOR, ".preview-panel"):
                 print("✓ PDF viewer works for third result too")
                 if third_page_displayed == third_page:
                     print(f"✓ Page correctly updated to {third_page_displayed}")

@@ -52,151 +52,200 @@ function App() {
     setFilters(prev => ({ ...prev, [key]: value }));
   };
 
+  const handleClearFilters = () => {
+    setFilters({});
+  };
+
+  const handleResultClick = (result: SearchResult) => {
+    setSelectedDoc(result);
+  };
+
+  const handleClosePreview = () => {
+    setSelectedDoc(null);
+  };
+
+  const hasSearched = results.length > 0 || (query && !loading);
+
   return (
     <div className="app">
-      {/* Header */}
-      <header className="header">
-        <h1>Humanitarian Evaluation Search</h1>
-        <form onSubmit={handleSearch} className="search-form">
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search evaluations..."
-            className="search-input"
-          />
-          <button type="submit" disabled={loading} className="search-button">
-            {loading ? 'Searching...' : 'Search'}
-          </button>
-        </form>
+      {/* Header - Purple gradient bar */}
+      <header className={`header ${hasSearched ? 'header-compact' : 'header-hero'}`}>
+        <div className="header-content">
+          <h1 className="header-title">Humanitarian Evaluation Search</h1>
+          <form onSubmit={handleSearch} className="search-form">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search evaluations..."
+              className="search-input"
+            />
+            <button type="submit" disabled={loading} className="search-button">
+              {loading ? 'Searching...' : 'Search'}
+            </button>
+          </form>
+        </div>
       </header>
 
-      <div className={`main-content ${results.length > 0 ? 'with-results' : 'no-results'} ${selectedDoc ? 'with-pdf' : 'no-pdf'}`}>
-        {/* Filters Sidebar - only show when we have results */}
-        {results.length > 0 && (
-          <aside className="filters">
-            <h3>Filters</h3>
+      {/* Empty State */}
+      {!hasSearched && (
+        <div className="empty-state">
+          <div className="empty-state-content">
+            <h2>Welcome to Humanitarian Evaluation Search</h2>
+            <p>
+              Search through indexed evaluation reports using semantic search.
+            </p>
+            <p>
+              Try searching for topics like "climate change", "education", "health", etc.
+            </p>
+          </div>
+        </div>
+      )}
 
-            {facets && (
-              <>
-                <div className="filter-group">
-                  <label>Organization</label>
-                  <select
-                    value={filters.organization || ''}
-                    onChange={(e) => handleFilterChange('organization', e.target.value)}
-                  >
-                    <option value="">All</option>
-                    {facets.organizations.slice(0, 20).map(f => (
-                      <option key={f.value} value={f.value}>
-                        {f.value} ({f.count})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+      {/* Results State */}
+      {hasSearched && (
+        <div className="main-container">
+          <div className={`content-wrapper ${selectedDoc ? 'with-preview' : ''}`}>
+            {/* Left Column: Filters */}
+            <aside className="filters-column">
+              <div className="filters-card">
+                <h3 className="filters-title">Filters</h3>
 
-                <div className="filter-group">
-                  <label>Year</label>
-                  <select
-                    value={filters.year || ''}
-                    onChange={(e) => handleFilterChange('year', e.target.value)}
-                  >
-                    <option value="">All</option>
-                    {facets.years.slice(0, 10).map(f => (
-                      <option key={f.value} value={f.value}>
-                        {f.value} ({f.count})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {facets && (
+                  <>
+                    <div className="filter-group">
+                      <label className="filter-label">Organization</label>
+                      <select
+                        value={filters.organization || ''}
+                        onChange={(e) => handleFilterChange('organization', e.target.value)}
+                        className="filter-select"
+                      >
+                        <option value="">All</option>
+                        {facets.organizations.slice(0, 20).map(f => (
+                          <option key={f.value} value={f.value}>
+                            {f.value} ({f.count})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div className="filter-group">
-                  <label>Evaluation Type</label>
-                  <select
-                    value={filters.evaluation_type || ''}
-                    onChange={(e) => handleFilterChange('evaluation_type', e.target.value)}
-                  >
-                    <option value="">All</option>
-                    {facets.evaluation_types.slice(0, 10).map(f => (
-                      <option key={f.value} value={f.value}>
-                        {f.value} ({f.count})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    <div className="filter-group">
+                      <label className="filter-label">Year</label>
+                      <select
+                        value={filters.year || ''}
+                        onChange={(e) => handleFilterChange('year', e.target.value)}
+                        className="filter-select"
+                      >
+                        <option value="">All</option>
+                        {facets.years.slice(0, 10).map(f => (
+                          <option key={f.value} value={f.value}>
+                            {f.value} ({f.count})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                <button
-                  onClick={() => setFilters({})}
-                  className="clear-filters"
-                >
-                  Clear Filters
-                </button>
-              </>
-            )}
-          </aside>
-        )}
+                    <div className="filter-group">
+                      <label className="filter-label">Evaluation Type</label>
+                      <select
+                        value={filters.evaluation_type || ''}
+                        onChange={(e) => handleFilterChange('evaluation_type', e.target.value)}
+                        className="filter-select"
+                      >
+                        <option value="">All</option>
+                        {facets.evaluation_types.slice(0, 10).map(f => (
+                          <option key={f.value} value={f.value}>
+                            {f.value} ({f.count})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-        {/* Results */}
-        <main className="results">
-          {results.length > 0 && (
-            <div className="results-header">
-              Found {results.length} results for "{query}"
-            </div>
-          )}
-
-          {results.map((result) => (
-            <div key={result.chunk_id} className="result-card" data-doc-id={result.doc_id} data-page={result.page_num}>
-              <h3
-                onClick={() => {
-                  console.log('Clicked result:', result.doc_id, 'page:', result.page_num);
-                  setSelectedDoc(result);
-                }}
-                className="result-title"
-              >
-                {result.title}
-              </h3>
-              <div className="result-meta">
-                {result.organization && <span className="badge">{result.organization}</span>}
-                {result.year && <span className="badge">{result.year}</span>}
-                <span className="badge">Page {result.page_num}</span>
-                <span className="score">Score: {result.score.toFixed(3)}</span>
+                    <button
+                      onClick={handleClearFilters}
+                      className="clear-filters-button"
+                    >
+                      Clear Filters
+                    </button>
+                  </>
+                )}
               </div>
-              {result.headings.length > 0 && (
-                <div className="breadcrumb">
-                  {result.headings.join(' › ')}
+            </aside>
+
+            {/* Middle Column: Results List */}
+            <main className="results-column">
+              {results.length > 0 && (
+                <>
+                  <div className="results-header">
+                    Found {results.length} results for "{query}"
+                  </div>
+
+                  <div className="results-list">
+                    {results.map((result) => (
+                      <div
+                        key={result.chunk_id}
+                        className={`result-card ${selectedDoc?.chunk_id === result.chunk_id ? 'result-card-selected' : ''}`}
+                        data-doc-id={result.doc_id}
+                        data-page={result.page_num}
+                        onClick={() => handleResultClick(result)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            handleResultClick(result);
+                          }
+                        }}
+                      >
+                        <h3 className="result-title result-title-link">{result.title}</h3>
+
+                        <div className="result-badges">
+                          {result.organization && (
+                            <span className="badge badge-org">{result.organization}</span>
+                          )}
+                          {result.year && (
+                            <span className="badge badge-year">{result.year}</span>
+                          )}
+                          <span className="badge badge-page">Page {result.page_num}</span>
+                          <span className="result-score">Score: {result.score.toFixed(3)}</span>
+                        </div>
+
+                        {result.headings.length > 0 && (
+                          <div className="result-breadcrumb">
+                            {result.headings.join(' › ')}
+                          </div>
+                        )}
+
+                        <p className="result-snippet">
+                          {result.text.substring(0, 200)}...
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {results.length === 0 && !loading && (
+                <div className="no-results">
+                  <p>No results found. Try different search terms or adjust filters.</p>
                 </div>
               )}
-              <p className="snippet">{result.text.substring(0, 300)}...</p>
-            </div>
-          ))}
+            </main>
 
-          {results.length === 0 && query && !loading && (
-            <div className="no-results">
-              No results found. Try different search terms or filters.
-            </div>
-          )}
-
-          {!query && (
-            <div className="welcome">
-              <h2>Welcome to Humanitarian Evaluation Search</h2>
-              <p>Search through indexed evaluation reports using semantic search.</p>
-              <p>Try searching for topics like "climate change", "education", "health", etc.</p>
-            </div>
-          )}
-        </main>
-
-        {/* PDF Viewer */}
-        {selectedDoc && (
-          <aside className="pdf-viewer">
-            <PDFViewer
-              docId={selectedDoc.doc_id}
-              pageNum={selectedDoc.page_num}
-              searchText={selectedDoc.text}
-              onClose={() => setSelectedDoc(null)}
-              title={selectedDoc.title}
-            />
-          </aside>
-        )}
-      </div>
+            {/* Right Column: Preview Panel */}
+            {selectedDoc && (
+              <aside className="preview-panel">
+                <PDFViewer
+                  docId={selectedDoc.doc_id}
+                  pageNum={selectedDoc.page_num}
+                  searchText={selectedDoc.text}
+                  onClose={handleClosePreview}
+                  title={selectedDoc.title}
+                />
+              </aside>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
