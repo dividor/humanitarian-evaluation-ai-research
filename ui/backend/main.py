@@ -4,10 +4,9 @@ FastAPI server that provides semantic search over indexed documents in Qdrant.
 """
 
 import logging
-import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,10 +16,8 @@ from pydantic import BaseModel
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from qdrant_client.http import models
-
-from pipeline.db import db
-from pipeline.search import search_chunks
+from pipeline.db import db  # noqa: E402
+from pipeline.search import search_chunks  # noqa: E402
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -73,7 +70,8 @@ def infer_paragraphs_from_bboxes(text: str, bboxes: List[tuple]) -> str:
         large_gaps = [g for g in gaps if g > threshold]
 
         logger.info(
-            f"Bbox analysis: {len(bboxes)} boxes, {len(large_gaps)} large gaps (threshold: {threshold:.2f})"
+            f"Bbox analysis: {len(bboxes)} boxes, "
+            f"{len(large_gaps)} large gaps (threshold: {threshold:.2f})"
         )
 
         # If we found significant gaps, look for sentence breaks in the text
@@ -414,15 +412,79 @@ async def serve_pdf(doc_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/highlight/chunk/{chunk_id}", response_model=HighlightResponse)
+async def get_chunk_highlights(chunk_id: str):
+    """
+    Get bounding boxes for a specific chunk.
+    This is the simplest approach - just return the bbox from the clicked chunk.
+    """
+    try:
+        # Get the specific chunk by ID
+        chunk = db.client.retrieve(
+            collection_name="chunks", ids=[chunk_id], with_payload=True
+        )
+
+        if not chunk:
+            return HighlightResponse(highlights=[], total=0)
+
+        chunk_point = chunk[0]
+        payload = chunk_point.payload
+        chunk_page = payload.get("page_num")
+        chunk_bboxes = payload.get("bbox", [])
+        chunk_text = payload.get("text", "")
+
+        highlights = []
+
+        # Convert bboxes to highlight format
+        for bbox_data in chunk_bboxes:
+            if not bbox_data:
+                continue
+
+            # Handle different bbox formats
+            if isinstance(bbox_data, dict):
+                bbox = bbox_data
+            elif isinstance(bbox_data, (list, tuple)) and len(bbox_data) >= 4:
+                # Convert tuple (l, b, r, t) from docling to dict {l, t, r, b}
+                bbox = {
+                    "l": bbox_data[0],  # left
+                    "b": bbox_data[1],  # bottom
+                    "r": bbox_data[2],  # right
+                    "t": bbox_data[3],  # top
+                }
+            else:
+                continue
+
+            # Ensure all required keys are present
+            if all(k in bbox for k in ["l", "t", "r", "b"]):
+                highlights.append(
+                    HighlightBox(
+                        page=chunk_page,
+                        bbox=bbox,
+                        text=chunk_text[:100],
+                    )
+                )
+
+        return HighlightResponse(highlights=highlights, total=len(highlights))
+
+    except Exception as e:
+        logger.error(f"Chunk highlight error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/highlight/{doc_id}", response_model=HighlightResponse)
 async def get_highlights(
     doc_id: str,
     page: Optional[int] = Query(None, description="Filter by page number"),
-    text: Optional[str] = Query(None, description="Filter by text content"),
+    text: Optional[str] = Query(
+        None,
+        description="Filter by text content (not recommended - use page filter instead)",
+    ),
 ):
     """
-    Get bounding box data for highlighting specific chunks on pages.
-    Uses bbox metadata stored in Qdrant chunks collection.
+    Get bounding box data for highlighting chunks on pages.
+
+    Note: Text filtering may miss results due to semantic vs literal matching.
+    For best results, filter by page only and let all chunks on that page be highlighted.
     """
     try:
         # Query chunks from Qdrant for this document
@@ -450,12 +512,15 @@ async def get_highlights(
             chunk_page = payload.get("page_num")
             chunk_bboxes = payload.get("bbox", [])
 
-            # Filter by text if provided
-            if text and text.lower() not in chunk_text.lower():
+            # Filter by page if provided (RECOMMENDED)
+            if page and chunk_page != page:
                 continue
 
-            # Filter by page if provided
-            if page and chunk_page != page:
+            # OPTIONAL: Filter by text if explicitly requested
+            # Note: This may filter out semantically similar matches
+            # (e.g., "évaluation" vs "evaluation")
+            # so it's generally better to rely on page filtering only
+            if text and text.lower() not in chunk_text.lower():
                 continue
 
             # Convert bboxes to highlight format

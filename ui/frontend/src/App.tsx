@@ -295,8 +295,8 @@ function App() {
           <div className="preview-panel" onClick={(e) => e.stopPropagation()}>
             <PDFViewer
               docId={selectedDoc.doc_id}
+              chunkId={selectedDoc.chunk_id}
               pageNum={selectedDoc.page_num}
-              searchText={query}
               onClose={handleClosePreview}
               title={selectedDoc.title}
             />

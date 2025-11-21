@@ -12,16 +12,16 @@ declare global {
 
 interface PDFViewerProps {
   docId: string;
+  chunkId: string;
   pageNum?: number;
-  searchText?: string;
   onClose: () => void;
   title?: string;
 }
 
 export const PDFViewer: React.FC<PDFViewerProps> = ({
   docId,
+  chunkId,
   pageNum = 1,
-  searchText = '',
   onClose,
   title = 'Document'
 }) => {
@@ -72,11 +72,11 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
     initPDF();
   }, [docId]);
 
-  // Load highlight data when docId or searchText changes
+  // Load highlight data when chunkId changes
   useEffect(() => {
-    console.log('PDFViewer: loading highlights for', docId, searchText);
+    console.log('PDFViewer: loading highlights for chunk', chunkId);
     loadHighlights();
-  }, [docId, searchText]);
+  }, [chunkId]);
 
   // Re-render page when page changes or scale changes
   useEffect(() => {
@@ -108,17 +108,13 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
 
   const loadHighlights = async () => {
     try {
-      const params = new URLSearchParams();
-      if (searchText) {
-        params.append('text', searchText);
-      }
-
+      // Get highlights for the specific chunk
       const response = await axios.get<{ highlights: HighlightBox[]; total: number }>(
-        `${API_BASE_URL}/highlight/${docId}?${params}`
+        `${API_BASE_URL}/highlight/chunk/${chunkId}`
       );
 
       setHighlights(response.data.highlights || []);
-      console.log(`Loaded ${response.data.total} highlight positions`);
+      console.log(`Loaded ${response.data.total} highlight positions for chunk ${chunkId}`);
     } catch (err) {
       console.error('Error loading highlights:', err);
       setHighlights([]);
