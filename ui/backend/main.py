@@ -425,7 +425,8 @@ async def serve_pdf(doc_id: str):
 async def get_chunk_highlights(chunk_id: str):
     """
     Get bounding boxes for a specific chunk.
-    This is the simplest approach - just return the bbox from the clicked chunk.
+    Returns all bboxes for the chunk, with their correct page numbers.
+    Chunks can span multiple pages.
     """
     try:
         # Get the specific chunk by ID
@@ -438,28 +439,44 @@ async def get_chunk_highlights(chunk_id: str):
 
         chunk_point = chunk[0]
         payload = chunk_point.payload
-        chunk_page = payload.get("page_num")
         chunk_bboxes = payload.get("bbox", [])
         chunk_text = payload.get("text", "")
 
         highlights = []
 
         # Convert bboxes to highlight format
+        # Bboxes are now stored as (page, bbox_tuple) pairs
         for bbox_data in chunk_bboxes:
             if not bbox_data:
                 continue
 
-            # Handle different bbox formats
-            if isinstance(bbox_data, dict):
-                bbox = bbox_data
+            # Handle new format: (page, bbox_tuple)
+            if isinstance(bbox_data, (list, tuple)) and len(bbox_data) == 2:
+                # New format with page number
+                page_num, bbox_tuple = bbox_data
+
+                if isinstance(bbox_tuple, (list, tuple)) and len(bbox_tuple) >= 4:
+                    bbox = {
+                        "l": bbox_tuple[0],  # left
+                        "b": bbox_tuple[1],  # bottom
+                        "r": bbox_tuple[2],  # right
+                        "t": bbox_tuple[3],  # top
+                    }
+                else:
+                    continue
             elif isinstance(bbox_data, (list, tuple)) and len(bbox_data) >= 4:
-                # Convert tuple (l, b, r, t) from docling to dict {l, t, r, b}
+                # Old format without page number (backward compatibility)
+                page_num = payload.get("page_num")
                 bbox = {
-                    "l": bbox_data[0],  # left
-                    "b": bbox_data[1],  # bottom
-                    "r": bbox_data[2],  # right
-                    "t": bbox_data[3],  # top
+                    "l": bbox_data[0],
+                    "b": bbox_data[1],
+                    "r": bbox_data[2],
+                    "t": bbox_data[3],
                 }
+            elif isinstance(bbox_data, dict):
+                # Dict format
+                page_num = payload.get("page_num")
+                bbox = bbox_data
             else:
                 continue
 
@@ -467,7 +484,7 @@ async def get_chunk_highlights(chunk_id: str):
             if all(k in bbox for k in ["l", "t", "r", "b"]):
                 highlights.append(
                     HighlightBox(
-                        page=chunk_page,
+                        page=page_num,
                         bbox=bbox,
                         text=chunk_text[:100],
                     )

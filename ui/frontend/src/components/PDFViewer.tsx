@@ -83,7 +83,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
     if (pdfDoc) {
       renderPage(currentPage);
     }
-  }, [currentPage, scale, pdfDoc, highlights]);
+  }, [currentPage, scale, pdfDoc]);
 
   const loadPDF = async () => {
     setLoading(true);
@@ -115,6 +115,11 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
 
       setHighlights(response.data.highlights || []);
       console.log(`Loaded ${response.data.total} highlight positions for chunk ${chunkId}`);
+
+      // Re-render the current page to show highlights
+      if (pdfDoc && currentPage) {
+        renderPage(currentPage);
+      }
     } catch (err) {
       console.error('Error loading highlights:', err);
       setHighlights([]);

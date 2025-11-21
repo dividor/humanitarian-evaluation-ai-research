@@ -62,7 +62,7 @@ def chunk_document(doc_json_path: str) -> List[Dict[str, Any]]:
         for chunk in chunks:
             # Extract metadata from provenance
             page_nums = set()
-            bboxes = []
+            bboxes = []  # Now stores (page, bbox_tuple) pairs
 
             if hasattr(chunk, "meta") and hasattr(chunk.meta, "doc_items"):
                 for item in chunk.meta.doc_items:
@@ -70,8 +70,8 @@ def chunk_document(doc_json_path: str) -> List[Dict[str, Any]]:
                         for prov in item.prov:
                             page_nums.add(prov.page_no)
                             if hasattr(prov, "bbox") and prov.bbox:
-                                # Store bbox as tuple (l, t, r, b)
-                                bboxes.append(prov.bbox.as_tuple())
+                                # Store bbox WITH its page number as (page, bbox_tuple)
+                                bboxes.append((prov.page_no, prov.bbox.as_tuple()))
 
             # Get headings
             headings = []
@@ -82,9 +82,9 @@ def chunk_document(doc_json_path: str) -> List[Dict[str, Any]]:
                 {
                     "text": chunk.text,
                     "page_num": (
-                        list(page_nums)[0] if page_nums else 1
-                    ),  # Default to 1 if unknown
-                    "bbox": [b for b in bboxes if b],  # Filter None
+                        min(page_nums) if page_nums else 1
+                    ),  # Use first page as primary
+                    "bbox": [b for b in bboxes if b],  # List of (page, bbox) tuples
                     "headings": headings,
                 }
             )
