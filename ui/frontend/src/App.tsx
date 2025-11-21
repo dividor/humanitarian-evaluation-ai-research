@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import './App.css';
 import API_BASE_URL from './config';
@@ -19,6 +19,22 @@ function App() {
     loadFacets();
   }, []);
 
+  // Debounced search - wait 500ms after user stops typing
+  useEffect(() => {
+    // Don't search if query is empty
+    if (!query.trim()) {
+      setResults([]);
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      performSearch();
+    }, 500);
+
+    // Cleanup: cancel the timeout if query changes before 500ms
+    return () => clearTimeout(timeoutId);
+  }, [query, filters]); // Re-run when query or filters change
+
   const loadFacets = async () => {
     try {
       const response = await axios.get<Facets>(`${API_BASE_URL}/facets`);
@@ -28,8 +44,7 @@ function App() {
     }
   };
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const performSearch = useCallback(async () => {
     if (!query.trim()) return;
 
     setLoading(true);
@@ -47,6 +62,12 @@ function App() {
     } finally {
       setLoading(false);
     }
+  }, [query, filters]);
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    // When form is submitted (Enter key), search immediately
+    performSearch();
   };
 
   const handleFilterChange = (key: keyof SearchFilters, value: string) => {
@@ -82,49 +103,37 @@ function App() {
 
   return (
     <div className="app">
-      {/* Header - Purple gradient bar */}
-      <header className={`header ${hasSearched ? 'header-compact' : 'header-hero'}`}>
-        <div className="header-content">
-          <h1 className="header-title">ABC</h1>
-          <form onSubmit={handleSearch} className="search-form">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search evaluations..."
-              className="search-input"
-            />
-            <button type="submit" disabled={loading} className="search-button">
-              {loading ? 'Searching...' : 'Search'}
-            </button>
-          </form>
+      {/* Top Navigation Bar */}
+      <header className="top-bar">
+        <div className="top-bar-content">
+          <h1 className="app-title">Evidence Lab</h1>
         </div>
       </header>
 
-      {/* Empty State */}
-      {!hasSearched && (
-        <div className="empty-state">
-          <div className="empty-state-content">
-            <h2>Welcome to ABC</h2>
-            <p>
-              Search through indexed evaluation reports using semantic search.
-            </p>
-            <p>
-              Try searching for topics like "climate change", "education", "health", etc.
-            </p>
-          </div>
-        </div>
-      )}
+      {/* Search Box Container */}
+      <div className="search-container">
+        <form onSubmit={handleSearch} className="search-form">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search evaluations..."
+            className="search-input"
+          />
+          <button type="submit" disabled={loading} className="search-button">
+            {loading ? 'Searching...' : 'Search'}
+          </button>
+        </form>
+      </div>
 
-      {/* Results State */}
-      {hasSearched && (
-        <div className="main-container">
-          <div className="content-wrapper">
+      {/* Main Content Area - Only show when results exist */}
+      {results.length > 0 && (
+        <div className="main-content">
+          <div className="content-grid">
             {/* Left Column: Filters */}
-            <aside className="filters-column">
+            <aside className="filters-section">
+              <h2 className="section-heading">Filters</h2>
               <div className="filters-card">
-                <h3 className="filters-title">Filters</h3>
-
                 {facets && (
                   <>
                     <div className="filter-group">
@@ -186,113 +195,111 @@ function App() {
               </div>
             </aside>
 
-            {/* Middle Column: Results List */}
-            <main className="results-column">
-              {results.length > 0 && (
-                <>
-                  <div className="results-header">
-                    Found {results.length} results for "{query}"
-                  </div>
+            {/* Right Column: Search Results */}
+            <main className="results-section">
+              <h2 className="section-heading">Search Results</h2>
 
-                  <div className="results-list">
-                    {results.map((result) => {
-                      const isExpanded = expandedCards.has(result.chunk_id);
-                      const snippetText = result.text;
-                      const displayText = isExpanded ? snippetText : snippetText.substring(0, 200);
-
-                      return (
-                        <div
-                          key={result.chunk_id}
-                          className={`result-card ${selectedDoc?.chunk_id === result.chunk_id ? 'result-card-selected' : ''}`}
-                          data-doc-id={result.doc_id}
-                          data-page={result.page_num}
-                        >
-                          <h3
-                            className="result-title result-title-link"
-                            onClick={() => handleResultClick(result)}
-                            role="button"
-                            tabIndex={0}
-                            onKeyPress={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                handleResultClick(result);
-                              }
-                            }}
-                          >
-                            {result.title}
-                          </h3>
-
-                          <div className="result-badges">
-                            {result.organization && (
-                              <span className="badge badge-org">{result.organization}</span>
-                            )}
-                            {result.year && (
-                              <span className="badge badge-year">{result.year}</span>
-                            )}
-                            <span className="badge badge-page">Page {result.page_num}</span>
-                            <span className="result-score">Score: {result.score.toFixed(3)}</span>
-                          </div>
-
-                          {result.headings.length > 0 && (
-                            <div className="result-breadcrumb">
-                              {result.headings.join(' › ')}
-                            </div>
-                          )}
-
-                          <p className="result-snippet">
-                            {displayText}
-                            {!isExpanded && snippetText.length > 200 && (
-                              <>
-                                ...{' '}
-                                <button
-                                  className="see-more-link"
-                                  onClick={(e) => toggleCardExpansion(result.chunk_id, e)}
-                                  aria-label="See more"
-                                >
-                                  See more
-                                </button>
-                              </>
-                            )}
-                            {isExpanded && snippetText.length > 200 && (
-                              <>
-                                {' '}
-                                <button
-                                  className="see-more-link"
-                                  onClick={(e) => toggleCardExpansion(result.chunk_id, e)}
-                                  aria-label="See less"
-                                >
-                                  See less
-                                </button>
-                              </>
-                            )}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-
-              {results.length === 0 && !loading && (
-                <div className="no-results">
-                  <p>No results found. Try different search terms or adjust filters.</p>
-                </div>
-              )}
-            </main>
-
-            {/* Right Column: Preview Panel */}
-            {selectedDoc && (
-              <div className="preview-overlay" onClick={handleClosePreview}>
-                <div className="preview-panel" onClick={(e) => e.stopPropagation()}>
-                  <PDFViewer
-                    docId={selectedDoc.doc_id}
-                    pageNum={selectedDoc.page_num}
-                    searchText={query}
-                    onClose={handleClosePreview}
-                    title={selectedDoc.title}
-                  />
-                </div>
+              {/* AI Summary Box */}
+              <div className="ai-summary-box">
+                <h3 className="ai-summary-title">AI Summary</h3>
+                <p className="ai-summary-text">
+                  Found {results.length} results for "{query}". The results include evaluations
+                  from various organizations covering different themes and geographic regions.
+                </p>
               </div>
-            )}
+
+              {/* Results List */}
+              <div className="results-list">
+                {results.map((result) => {
+                  const isExpanded = expandedCards.has(result.chunk_id);
+                  const snippetText = result.text;
+                  const displayText = isExpanded ? snippetText : snippetText.substring(0, 200);
+
+                  return (
+                    <div
+                      key={result.chunk_id}
+                      className={`result-card ${selectedDoc?.chunk_id === result.chunk_id ? 'result-card-selected' : ''}`}
+                      data-doc-id={result.doc_id}
+                      data-page={result.page_num}
+                    >
+                      <h3
+                        className="result-title result-title-link"
+                        onClick={() => handleResultClick(result)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            handleResultClick(result);
+                          }
+                        }}
+                      >
+                        {result.title}
+                      </h3>
+
+                      <div className="result-badges">
+                        {result.organization && (
+                          <span className="badge badge-org">{result.organization}</span>
+                        )}
+                        {result.year && (
+                          <span className="badge badge-year">{result.year}</span>
+                        )}
+                        <span className="badge badge-page">Page {result.page_num}</span>
+                        <span className="result-score">Score: {result.score.toFixed(3)}</span>
+                      </div>
+
+                      {result.headings.length > 0 && (
+                        <div className="result-breadcrumb">
+                          {result.headings.join(' › ')}
+                        </div>
+                      )}
+
+                      <p className="result-snippet">
+                        {displayText}
+                        {!isExpanded && snippetText.length > 200 && (
+                          <>
+                            ...{' '}
+                            <button
+                              className="see-more-link"
+                              onClick={(e) => toggleCardExpansion(result.chunk_id, e)}
+                              aria-label="See more"
+                            >
+                              Show more
+                            </button>
+                          </>
+                        )}
+                        {isExpanded && snippetText.length > 200 && (
+                          <>
+                            {' '}
+                            <button
+                              className="see-more-link"
+                              onClick={(e) => toggleCardExpansion(result.chunk_id, e)}
+                              aria-label="See less"
+                            >
+                              Show less
+                            </button>
+                          </>
+                        )}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </main>
+          </div>
+        </div>
+      )}
+
+      {/* PDF Preview Overlay */}
+      {selectedDoc && (
+        <div className="preview-overlay" onClick={handleClosePreview}>
+          <div className="preview-panel" onClick={(e) => e.stopPropagation()}>
+            <PDFViewer
+              docId={selectedDoc.doc_id}
+              pageNum={selectedDoc.page_num}
+              searchText={query}
+              onClose={handleClosePreview}
+              title={selectedDoc.title}
+            />
           </div>
         </div>
       )}
