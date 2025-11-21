@@ -147,7 +147,8 @@ class FacetValue(BaseModel):
 
 
 class Facets(BaseModel):
-    organizations: List[FacetValue]
+    agencies: List[FacetValue]
+    titles: List[FacetValue]
     years: List[FacetValue]
     evaluation_types: List[FacetValue]
     countries: List[FacetValue]
@@ -192,7 +193,8 @@ def health():
 async def search(
     q: str = Query(..., description="Search query"),
     limit: int = Query(50, description="Maximum results"),
-    organization: Optional[str] = Query(None, description="Filter by organization"),
+    agency: Optional[str] = Query(None, description="Filter by agency"),
+    title: Optional[str] = Query(None, description="Filter by title (partial match)"),
     year: Optional[str] = Query(None, description="Filter by year"),
     evaluation_type: Optional[str] = Query(
         None, description="Filter by evaluation type"
@@ -226,7 +228,9 @@ async def search(
             doc = doc_cache[doc_id]
 
             # Apply filters
-            if organization and doc.get("organization") != organization:
+            if agency and doc.get("agency") != agency:
+                continue
+            if title and title.lower() not in doc.get("title", "").lower():
                 continue
             if year and str(doc.get("year")) != year:
                 continue
@@ -266,7 +270,9 @@ async def search(
                 headings=result.payload.get("headings") or [],  # Handle None
                 score=result.score,
                 title=doc.get("title", "Unknown"),
-                organization=doc.get("organization"),
+                organization=doc.get(
+                    "agency"
+                ),  # Map agency to organization for frontend
                 year=str(doc.get("year")) if doc.get("year") else None,
                 year_published=(
                     str(doc.get("year_published"))
@@ -289,7 +295,8 @@ async def search(
             total=len(filtered_results),
             query=q,
             filters={
-                "organization": [organization] if organization else [],
+                "agency": [agency] if agency else [],
+                "title": [title] if title else [],
                 "year": [year] if year else [],
                 "evaluation_type": [evaluation_type] if evaluation_type else [],
                 "country": [country] if country else [],
@@ -316,7 +323,8 @@ async def get_facets():
         # Count facets
         from collections import Counter
 
-        organizations = Counter()
+        agencies = Counter()
+        titles = Counter()
         years = Counter()
         evaluation_types = Counter()
         countries = Counter()
@@ -324,8 +332,10 @@ async def get_facets():
         themes = Counter()
 
         for doc in docs:
-            if doc.get("organization"):
-                organizations[doc.get("organization")] += 1
+            if doc.get("agency"):
+                agencies[doc.get("agency")] += 1
+            if doc.get("title"):
+                titles[doc.get("title")] += 1
             if doc.get("year"):
                 years[str(doc.get("year"))] += 1
             if doc.get("evaluation_type"):
@@ -342,9 +352,8 @@ async def get_facets():
                 themes[doc.get("theme")] += 1
 
         return Facets(
-            organizations=[
-                FacetValue(value=k, count=v) for k, v in organizations.most_common()
-            ],
+            agencies=[FacetValue(value=k, count=v) for k, v in agencies.most_common()],
+            titles=[FacetValue(value=k, count=v) for k, v in titles.most_common(20)],
             years=[
                 FacetValue(value=k, count=v)
                 for k, v in sorted(years.items(), reverse=True)

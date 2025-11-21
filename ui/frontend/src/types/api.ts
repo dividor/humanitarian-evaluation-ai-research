@@ -28,7 +28,8 @@ export interface FacetValue {
 }
 
 export interface Facets {
-  organizations: FacetValue[];
+  agencies: FacetValue[];
+  titles: FacetValue[];
   years: FacetValue[];
   evaluation_types: FacetValue[];
   countries: FacetValue[];
@@ -53,7 +54,8 @@ export interface HighlightResponse {
 }
 
 export interface SearchFilters {
-  organization?: string;
+  agency?: string;
+  title?: string;
   year?: string;
   evaluation_type?: string;
   country?: string;

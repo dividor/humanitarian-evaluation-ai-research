@@ -50,7 +50,8 @@ function App() {
     setLoading(true);
     try {
       const params = new URLSearchParams({ q: query, limit: '50' });
-      if (filters.organization) params.append('organization', filters.organization);
+      if (filters.agency) params.append('agency', filters.agency);
+      if (filters.title) params.append('title', filters.title);
       if (filters.year) params.append('year', filters.year);
       if (filters.evaluation_type) params.append('evaluation_type', filters.evaluation_type);
 
@@ -137,16 +138,32 @@ function App() {
                 {facets && (
                   <>
                     <div className="filter-group">
-                      <label className="filter-label">Organization</label>
+                      <label className="filter-label">Agency</label>
                       <select
-                        value={filters.organization || ''}
-                        onChange={(e) => handleFilterChange('organization', e.target.value)}
+                        value={filters.agency || ''}
+                        onChange={(e) => handleFilterChange('agency', e.target.value)}
                         className="filter-select"
                       >
                         <option value="">All</option>
-                        {facets.organizations.slice(0, 20).map(f => (
+                        {facets.agencies.slice(0, 20).map(f => (
                           <option key={f.value} value={f.value}>
                             {f.value} ({f.count})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="filter-group">
+                      <label className="filter-label">Report Title</label>
+                      <select
+                        value={filters.title || ''}
+                        onChange={(e) => handleFilterChange('title', e.target.value)}
+                        className="filter-select"
+                      >
+                        <option value="">All</option>
+                        {facets.titles.slice(0, 20).map(f => (
+                          <option key={f.value} value={f.value}>
+                            {f.value.substring(0, 60)}{f.value.length > 60 ? '...' : ''} ({f.count})
                           </option>
                         ))}
                       </select>
