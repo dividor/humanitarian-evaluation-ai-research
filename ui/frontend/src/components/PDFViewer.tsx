@@ -115,15 +115,40 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
       setCurrentPage(pageNum);
       setLoading(false);
 
-      // Set initial scroll position
+      // Set initial scroll position - after pages are rendered, scroll to first highlight
       setTimeout(() => {
-        if (scrollContainerRef.current && pageNum > 1) {
-          scrollContainerRef.current.scrollTop = (pageNum - 1) * ESTIMATED_PAGE_HEIGHT;
-        }
-      }, 100);
+        scrollToFirstHighlight();
+      }, 500);
     } catch (err: any) {
       setError(`Failed to load PDF: ${err.message}`);
       setLoading(false);
+    }
+  };
+
+  const scrollToFirstHighlight = () => {
+    if (!scrollContainerRef.current || highlights.length === 0) {
+      // No highlights, just scroll to the page
+      if (scrollContainerRef.current && pageNum > 1) {
+        scrollContainerRef.current.scrollTop = (pageNum - 1) * ESTIMATED_PAGE_HEIGHT;
+      }
+      return;
+    }
+
+    // Find the first highlight's page
+    const firstHighlight = highlights[0];
+    const highlightPage = firstHighlight.page;
+
+    // Scroll to that page, centered on the highlight
+    if (scrollContainerRef.current) {
+      // Calculate approximate position of highlight on the page
+      const pageScrollTop = (highlightPage - 1) * ESTIMATED_PAGE_HEIGHT;
+
+      // Try to center the highlight vertically
+      // Assuming highlight is roughly in middle of page, offset by viewport/2
+      const viewportHeight = scrollContainerRef.current.clientHeight;
+      const scrollPosition = pageScrollTop + ESTIMATED_PAGE_HEIGHT / 2 - viewportHeight / 2;
+
+      scrollContainerRef.current.scrollTop = Math.max(0, scrollPosition);
     }
   };
 
@@ -196,6 +221,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
         pageContainer.style.top = `${(pageNumber - 1) * ESTIMATED_PAGE_HEIGHT}px`;
         pageContainer.style.left = '50%';
         pageContainer.style.transform = 'translateX(-50%)';
+        pageContainer.style.overflow = 'visible';
         pagesContainerRef.current.appendChild(pageContainer);
       }
 
@@ -237,9 +263,10 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
         top: '0',
         width: `${viewport.width}px`,
         height: `${viewport.height}px`,
-        overflow: 'hidden',
+        overflow: 'visible',
         opacity: '1',
-        lineHeight: '1.0'
+        lineHeight: '1.0',
+        pointerEvents: 'auto'
       });
       textLayer.style.setProperty('--scale-factor', scale.toString());
       pageContainer.appendChild(textLayer);
