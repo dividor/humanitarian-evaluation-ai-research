@@ -98,10 +98,23 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
 
   // Update scroll position when page changes programmatically
   useEffect(() => {
-    if (scrollContainerRef.current && totalPages > 0 && isScrollingProgrammatically.current) {
+    console.log('Scroll effect triggered:', {
+      currentPage,
+      totalPages,
+      actualPageHeight,
+      isScrollingProgrammatically: isScrollingProgrammatically.current,
+      scrollContainerExists: !!scrollContainerRef.current
+    });
+
+    // Only scroll if actualPageHeight has been calculated
+    if (scrollContainerRef.current && totalPages > 0 && isScrollingProgrammatically.current && actualPageHeight > ESTIMATED_PAGE_HEIGHT) {
       const scrollPosition = (currentPage - 1) * actualPageHeight;
+      console.log(`Executing scroll to page ${currentPage} at position ${scrollPosition}px`);
       scrollContainerRef.current.scrollTop = scrollPosition;
       isScrollingProgrammatically.current = false;
+      console.log(`✅ Scrolled successfully`);
+    } else if (scrollContainerRef.current && totalPages > 0 && isScrollingProgrammatically.current) {
+      console.log(`⏳ Waiting for actualPageHeight (current: ${actualPageHeight}, need > ${ESTIMATED_PAGE_HEIGHT})`);
     }
   }, [currentPage, totalPages, actualPageHeight]);
 
@@ -126,6 +139,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
 
       setPdfDoc(pdf);
       setTotalPages(pdf.numPages);
+      isScrollingProgrammatically.current = true;  // Enable scroll for initial page
       setCurrentPage(pageNum);
       setLoading(false);
     } catch (err: any) {
@@ -246,12 +260,11 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
       const page = await pdfDoc.getPage(pageNumber);
       const viewport = page.getViewport({ scale });
 
-      // Update actual page height based on first rendered page
-      if (pageNumber === 1 || pageNumber === pageNum) {
-        const calculatedHeight = viewport.height + 20; // Add margin
-        if (Math.abs(calculatedHeight - actualPageHeight) > 10) {
-          setActualPageHeight(calculatedHeight);
-        }
+      // Update actual page height based on ANY rendered page (if not yet set properly)
+      const calculatedHeight = viewport.height + 20; // Add margin
+      if (actualPageHeight === ESTIMATED_PAGE_HEIGHT || Math.abs(calculatedHeight - actualPageHeight) > 10) {
+        console.log(`Setting actualPageHeight from page ${pageNumber}: ${calculatedHeight}px`);
+        setActualPageHeight(calculatedHeight);
       }
 
       // Get or create page container

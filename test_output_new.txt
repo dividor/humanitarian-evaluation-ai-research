@@ -1,0 +1,106 @@
+
+=== Testing PDF Highlighting ===
+
+1. Loading app...
+
+2. Searching for: L'élaboration  d'un  guide  sur  l'accès  à  la  s...
+
+3. Waiting for search results...
+   Found 50 search results
+
+============================================================
+Testing Result #1
+============================================================
+   Title: Promotion of Innovative and Formal Entrepreneurship in Seneg...
+   ✅ PDF viewer opened
+   Highlights found: 1
+   First highlight visible: True
+   Highlight position: x=687, y=91072, w=601, h=106
+   Viewport height: 941px
+   Highlight middle: 91125.0px
+   Viewport middle: 470.5px
+   Distance from center: 90654.5px
+   ⚠️  Highlight is 90654.5px from center
+   Checking if highlight persists...
+   ✅ Highlight still visible (1)
+   📸 Screenshot: highlight_test_result_1.png
+   PDF viewer closed
+
+
+============================================================
+Testing Result #2
+============================================================
+   Title: Promotion of Innovative and Formal Entrepreneurship in Seneg...
+   ✅ PDF viewer opened
+   Highlights found: 2
+   First highlight visible: True
+   Highlight position: x=585, y=73610, w=758, h=57
+   Viewport height: 941px
+   Highlight middle: 73638.5px
+   Viewport middle: 470.5px
+   Distance from center: 73168.0px
+   ⚠️  Highlight is 73168.0px from center
+   Checking if highlight persists...
+   ✅ Highlight still visible (2)
+   📸 Screenshot: highlight_test_result_2.png
+   PDF viewer closed
+
+
+============================================================
+Testing Result #3
+============================================================
+   Title: Promotion of Innovative and Formal Entrepreneurship in Seneg...
+   ✅ PDF viewer opened
+   Highlights found: 1
+   First highlight visible: True
+   Highlight position: x=606, y=54490, w=682, h=158
+   Viewport height: 941px
+   Highlight middle: 54569.0px
+   Viewport middle: 470.5px
+   Distance from center: 54098.5px
+   ⚠️  Highlight is 54098.5px from center
+   Checking if highlight persists...
+   ✅ Highlight still visible (1)
+   📸 Screenshot: highlight_test_result_3.png
+   PDF viewer closed
+
+
+============================================================
+Testing Result #4
+============================================================
+   Title: Promotion of Innovative and Formal Entrepreneurship in Seneg...
+   ✅ PDF viewer opened
+   Highlights found: 2
+   First highlight visible: True
+   Highlight position: x=585, y=87249, w=758, h=57
+   Viewport height: 941px
+   Highlight middle: 87277.5px
+   Viewport middle: 470.5px
+   Distance from center: 86807.0px
+   ⚠️  Highlight is 86807.0px from center
+   Checking if highlight persists...
+   ✅ Highlight still visible (2)
+   📸 Screenshot: highlight_test_result_4.png
+   PDF viewer closed
+
+
+============================================================
+Testing Result #5
+============================================================
+   Title: Promotion of Innovative and Formal Entrepreneurship in Seneg...
+   ✅ PDF viewer opened
+   Highlights found: 2
+   First highlight visible: True
+   Highlight position: x=606, y=86040, w=682, h=106
+   Viewport height: 941px
+   Highlight middle: 86093.0px
+   Viewport middle: 470.5px
+   Distance from center: 85622.5px
+   ⚠️  Highlight is 85622.5px from center
+   Checking if highlight persists...
+   ✅ Highlight still visible (2)
+   📸 Screenshot: highlight_test_result_5.png
+   PDF viewer closed
+
+
+✅ All tests completed
