@@ -154,62 +154,9 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
         `${API_BASE_URL}/highlight/chunk/${chunkId}`
       );
       setHighlights(response.data.highlights || []);
-
-      // After highlights are loaded, scroll to first one
-      if (response.data.highlights && response.data.highlights.length > 0) {
-        setTimeout(() => {
-          scrollToFirstHighlightWithData(response.data.highlights);
-        }, 300);
-      }
     } catch (err) {
       console.error('Error loading highlights:', err);
     }
-  };
-
-  const scrollToFirstHighlightWithData = (highlightData: HighlightBox[]) => {
-    if (!scrollContainerRef.current || highlightData.length === 0) return;
-
-    // Find the first highlight's page
-    const firstHighlight = highlightData[0];
-    const highlightPage = firstHighlight.page;
-    const bbox = firstHighlight.bbox;
-
-    console.log('Scrolling to first highlight:', { page: highlightPage, bbox });
-
-    // Update current page
-    setCurrentPage(highlightPage);
-
-    // Scroll to center the highlight in the viewport
-    setTimeout(() => {
-      if (scrollContainerRef.current) {
-        const pageScrollTop = (highlightPage - 1) * actualPageHeight;
-        const viewportHeight = scrollContainerRef.current.clientHeight;
-
-        // Calculate highlight position on the page
-        // PDF coordinates are from bottom-left, so we need to convert
-        // bbox.t is distance from bottom, we want distance from top
-        const highlightTopFromBottom = bbox.t * scale;
-        const highlightBottomFromBottom = bbox.b * scale;
-        const highlightMiddleFromBottom = (highlightTopFromBottom + highlightBottomFromBottom) / 2;
-
-        // Convert to distance from top of page (assuming standard page height ~800-1000)
-        // For now, use a rough estimate: middle of highlight as offset from page start
-        const highlightMiddleOnPage = actualPageHeight * 0.5; // Rough approximation
-
-        // Center the highlight's middle in the viewport
-        const scrollPosition = pageScrollTop + highlightMiddleOnPage - (viewportHeight / 2);
-
-        console.log('Scroll calculation:', {
-          pageScrollTop,
-          actualPageHeight,
-          viewportHeight,
-          highlightMiddleOnPage,
-          scrollPosition
-        });
-
-        scrollContainerRef.current.scrollTop = Math.max(0, scrollPosition);
-      }
-    }, 100);
   };
 
   const renderVisiblePages = async () => {
