@@ -18,7 +18,7 @@ interface PDFViewerProps {
   title?: string;
 }
 
-const ESTIMATED_PAGE_HEIGHT = 1100; // Approximate height per page for scrollbar
+const ESTIMATED_PAGE_HEIGHT = 1200; // Approximate height per page for scrollbar
 const BUFFER_PAGES = 2; // Number of pages to render before/after current
 
 export const PDFViewer: React.FC<PDFViewerProps> = ({
@@ -36,6 +36,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [highlights, setHighlights] = useState<HighlightBox[]>([]);
   const [renderedPages, setRenderedPages] = useState<Map<number, boolean>>(new Map());
+  const [actualPageHeight, setActualPageHeight] = useState(ESTIMATED_PAGE_HEIGHT);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const pagesContainerRef = useRef<HTMLDivElement>(null);
@@ -82,21 +83,34 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
     }
   }, [pdfDoc, currentPage, highlights, totalPages]);
 
+  // Re-position all rendered pages when actual page height changes
+  useEffect(() => {
+    if (actualPageHeight !== ESTIMATED_PAGE_HEIGHT && pagesContainerRef.current) {
+      // Update positions of all existing page containers
+      for (let i = 1; i <= totalPages; i++) {
+        const pageContainer = document.getElementById(`pdf-page-${i}`);
+        if (pageContainer) {
+          pageContainer.style.top = `${(i - 1) * actualPageHeight}px`;
+        }
+      }
+    }
+  }, [actualPageHeight, totalPages]);
+
   // Update scroll position when page changes programmatically
   useEffect(() => {
     if (scrollContainerRef.current && totalPages > 0 && isScrollingProgrammatically.current) {
-      const scrollPosition = (currentPage - 1) * ESTIMATED_PAGE_HEIGHT;
+      const scrollPosition = (currentPage - 1) * actualPageHeight;
       scrollContainerRef.current.scrollTop = scrollPosition;
       isScrollingProgrammatically.current = false;
     }
-  }, [currentPage, totalPages]);
+  }, [currentPage, totalPages, actualPageHeight]);
 
   // Handle scroll to determine current page
   const handleScroll = () => {
     if (!scrollContainerRef.current || totalPages === 0 || isScrollingProgrammatically.current) return;
 
     const scrollTop = scrollContainerRef.current.scrollTop;
-    const newPage = Math.floor(scrollTop / ESTIMATED_PAGE_HEIGHT) + 1;
+    const newPage = Math.floor(scrollTop / actualPageHeight) + 1;
     const clampedPage = Math.max(1, Math.min(totalPages, newPage));
 
     if (clampedPage !== currentPage) {
@@ -114,41 +128,9 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
       setTotalPages(pdf.numPages);
       setCurrentPage(pageNum);
       setLoading(false);
-
-      // Set initial scroll position - after pages are rendered, scroll to first highlight
-      setTimeout(() => {
-        scrollToFirstHighlight();
-      }, 500);
     } catch (err: any) {
       setError(`Failed to load PDF: ${err.message}`);
       setLoading(false);
-    }
-  };
-
-  const scrollToFirstHighlight = () => {
-    if (!scrollContainerRef.current || highlights.length === 0) {
-      // No highlights, just scroll to the page
-      if (scrollContainerRef.current && pageNum > 1) {
-        scrollContainerRef.current.scrollTop = (pageNum - 1) * ESTIMATED_PAGE_HEIGHT;
-      }
-      return;
-    }
-
-    // Find the first highlight's page
-    const firstHighlight = highlights[0];
-    const highlightPage = firstHighlight.page;
-
-    // Scroll to that page, centered on the highlight
-    if (scrollContainerRef.current) {
-      // Calculate approximate position of highlight on the page
-      const pageScrollTop = (highlightPage - 1) * ESTIMATED_PAGE_HEIGHT;
-
-      // Try to center the highlight vertically
-      // Assuming highlight is roughly in middle of page, offset by viewport/2
-      const viewportHeight = scrollContainerRef.current.clientHeight;
-      const scrollPosition = pageScrollTop + ESTIMATED_PAGE_HEIGHT / 2 - viewportHeight / 2;
-
-      scrollContainerRef.current.scrollTop = Math.max(0, scrollPosition);
     }
   };
 
@@ -158,9 +140,62 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
         `${API_BASE_URL}/highlight/chunk/${chunkId}`
       );
       setHighlights(response.data.highlights || []);
+
+      // After highlights are loaded, scroll to first one
+      if (response.data.highlights && response.data.highlights.length > 0) {
+        setTimeout(() => {
+          scrollToFirstHighlightWithData(response.data.highlights);
+        }, 300);
+      }
     } catch (err) {
       console.error('Error loading highlights:', err);
     }
+  };
+
+  const scrollToFirstHighlightWithData = (highlightData: HighlightBox[]) => {
+    if (!scrollContainerRef.current || highlightData.length === 0) return;
+
+    // Find the first highlight's page
+    const firstHighlight = highlightData[0];
+    const highlightPage = firstHighlight.page;
+    const bbox = firstHighlight.bbox;
+
+    console.log('Scrolling to first highlight:', { page: highlightPage, bbox });
+
+    // Update current page
+    setCurrentPage(highlightPage);
+
+    // Scroll to center the highlight in the viewport
+    setTimeout(() => {
+      if (scrollContainerRef.current) {
+        const pageScrollTop = (highlightPage - 1) * actualPageHeight;
+        const viewportHeight = scrollContainerRef.current.clientHeight;
+
+        // Calculate highlight position on the page
+        // PDF coordinates are from bottom-left, so we need to convert
+        // bbox.t is distance from bottom, we want distance from top
+        const highlightTopFromBottom = bbox.t * scale;
+        const highlightBottomFromBottom = bbox.b * scale;
+        const highlightMiddleFromBottom = (highlightTopFromBottom + highlightBottomFromBottom) / 2;
+
+        // Convert to distance from top of page (assuming standard page height ~800-1000)
+        // For now, use a rough estimate: middle of highlight as offset from page start
+        const highlightMiddleOnPage = actualPageHeight * 0.5; // Rough approximation
+
+        // Center the highlight's middle in the viewport
+        const scrollPosition = pageScrollTop + highlightMiddleOnPage - (viewportHeight / 2);
+
+        console.log('Scroll calculation:', {
+          pageScrollTop,
+          actualPageHeight,
+          viewportHeight,
+          highlightMiddleOnPage,
+          scrollPosition
+        });
+
+        scrollContainerRef.current.scrollTop = Math.max(0, scrollPosition);
+      }
+    }, 100);
   };
 
   const renderVisiblePages = async () => {
@@ -211,6 +246,14 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
       const page = await pdfDoc.getPage(pageNumber);
       const viewport = page.getViewport({ scale });
 
+      // Update actual page height based on first rendered page
+      if (pageNumber === 1 || pageNumber === pageNum) {
+        const calculatedHeight = viewport.height + 20; // Add margin
+        if (Math.abs(calculatedHeight - actualPageHeight) > 10) {
+          setActualPageHeight(calculatedHeight);
+        }
+      }
+
       // Get or create page container
       let pageContainer = document.getElementById(`pdf-page-${pageNumber}`) as HTMLDivElement;
       if (!pageContainer) {
@@ -218,11 +261,15 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
         pageContainer.id = `pdf-page-${pageNumber}`;
         pageContainer.className = 'pdf-page-wrapper';
         pageContainer.style.position = 'absolute';
-        pageContainer.style.top = `${(pageNumber - 1) * ESTIMATED_PAGE_HEIGHT}px`;
+        pageContainer.style.top = `${(pageNumber - 1) * actualPageHeight}px`;
         pageContainer.style.left = '50%';
         pageContainer.style.transform = 'translateX(-50%)';
         pageContainer.style.overflow = 'visible';
+        pageContainer.style.marginBottom = '20px';
         pagesContainerRef.current.appendChild(pageContainer);
+      } else {
+        // Update position with actual height
+        pageContainer.style.top = `${(pageNumber - 1) * actualPageHeight}px`;
       }
 
       // Clear existing content
@@ -360,7 +407,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
     );
   }
 
-  const totalScrollHeight = totalPages * ESTIMATED_PAGE_HEIGHT;
+  const totalScrollHeight = totalPages * actualPageHeight;
 
   return (
     <div className="pdf-viewer-container">

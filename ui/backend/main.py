@@ -315,10 +315,14 @@ async def get_facets():
     """
     Get facet counts for all filterable fields.
     Used to populate filter UI.
+    Only includes documents with status='indexed'.
     """
     try:
-        # Get all documents
+        # Get all documents that are indexed
         docs = list(db.get_all_documents())
+
+        # Filter to only indexed documents
+        indexed_docs = [doc for doc in docs if doc.get("status") == "indexed"]
 
         # Count facets
         from collections import Counter
@@ -331,7 +335,7 @@ async def get_facets():
         regions = Counter()
         themes = Counter()
 
-        for doc in docs:
+        for doc in indexed_docs:
             if doc.get("agency"):
                 agencies[doc.get("agency")] += 1
             if doc.get("title"):
