@@ -1,11 +1,8 @@
-import glob
-import hashlib
 import logging
 import os
 import sys
 import uuid
 from pathlib import Path
-from typing import List
 
 from fastembed import SparseTextEmbedding, TextEmbedding
 from qdrant_client.http import models
@@ -13,9 +10,9 @@ from qdrant_client.http import models
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pipeline.chunk import chunk_document
-from pipeline.db import CHUNKS_COLLECTION, db
-from pipeline.utils import generate_doc_id
+from pipeline.chunk import chunk_document  # noqa: E402
+from pipeline.db import db  # noqa: E402
+from pipeline.utils import generate_doc_id  # noqa: E402
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -148,7 +145,23 @@ def index_documents(limit: int = 10, force: bool = False):
                         "text": chunk["text"],
                         "doc_id": doc_id,
                         "page_num": chunk["page_num"],
-                        "bbox": chunk["bbox"],
+                        # Convert bbox tuples to nested lists for JSON compatibility
+                        # Format: [[page, [l, b, r, t]], [page, [l, b, r, t]], ...]
+                        "bbox": [
+                            (
+                                [
+                                    bbox[0],
+                                    (
+                                        list(bbox[1])
+                                        if isinstance(bbox[1], tuple)
+                                        else bbox[1]
+                                    ),
+                                ]
+                                if isinstance(bbox, tuple) and len(bbox) == 2
+                                else bbox
+                            )
+                            for bbox in chunk["bbox"]
+                        ],
                         "headings": chunk["headings"],
                         # Document metadata (denormalized for faceting)
                         "title": doc.get("title"),

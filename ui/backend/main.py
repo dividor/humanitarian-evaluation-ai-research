@@ -121,6 +121,7 @@ class SearchResult(BaseModel):
     doc_id: str
     text: str
     page_num: int
+    bbox: Optional[List] = None  # List of [page, [l, b, r, t]] coordinates
     headings: List[str]
     score: float
     # Document metadata (from join)
@@ -267,6 +268,7 @@ async def search(
                 doc_id=doc_id,
                 text=formatted_text,
                 page_num=result.payload.get("page_num", 0),
+                bbox=chunk_bboxes,  # Include bbox data
                 headings=result.payload.get("headings") or [],  # Handle None
                 score=result.score,
                 title=doc.get("title", "Unknown"),

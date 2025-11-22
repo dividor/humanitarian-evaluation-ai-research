@@ -4,6 +4,7 @@ import './App.css';
 import API_BASE_URL from './config';
 import { SearchResponse, Facets, SearchFilters, SearchResult } from './types/api';
 import { PDFViewer } from './components/PDFViewer';
+import { SearchableSelect } from './components/SearchableSelect';
 
 function App() {
   const [query, setQuery] = useState('');
@@ -13,6 +14,9 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<SearchResult | null>(null);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+
+  // Multi-select filters (for filters with > 5 options)
+  const [selectedTitles, setSelectedTitles] = useState<string[]>([]);
 
   // Load facets on mount
   useEffect(() => {
@@ -77,6 +81,7 @@ function App() {
 
   const handleClearFilters = () => {
     setFilters({});
+    setSelectedTitles([]);
   };
 
   const handleResultClick = (result: SearchResult) => {
@@ -153,21 +158,36 @@ function App() {
                       </select>
                     </div>
 
-                    <div className="filter-group">
-                      <label className="filter-label">Report Title</label>
-                      <select
-                        value={filters.title || ''}
-                        onChange={(e) => handleFilterChange('title', e.target.value)}
-                        className="filter-select"
-                      >
-                        <option value="">All</option>
-                        {facets.titles.slice(0, 20).map(f => (
-                          <option key={f.value} value={f.value}>
-                            {f.value.substring(0, 60)}{f.value.length > 60 ? '...' : ''} ({f.count})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    {/* Use searchable select for Report Title (usually has many options) */}
+                    {facets.titles.length > 5 ? (
+                      <SearchableSelect
+                        label="Report Title"
+                        options={facets.titles}
+                        selectedValues={selectedTitles}
+                        onChange={(values) => {
+                          setSelectedTitles(values);
+                          // For now, use first selected title as filter (API doesn't support multi-select yet)
+                          handleFilterChange('title', values[0] || '');
+                        }}
+                        placeholder="Search titles..."
+                      />
+                    ) : (
+                      <div className="filter-group">
+                        <label className="filter-label">Report Title</label>
+                        <select
+                          value={filters.title || ''}
+                          onChange={(e) => handleFilterChange('title', e.target.value)}
+                          className="filter-select"
+                        >
+                          <option value="">All</option>
+                          {facets.titles.map(f => (
+                            <option key={f.value} value={f.value}>
+                              {f.value.substring(0, 60)}{f.value.length > 60 ? '...' : ''} ({f.count})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
                     <div className="filter-group">
                       <label className="filter-label">Year</label>
